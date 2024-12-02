@@ -1,0 +1,102 @@
+---
+title: "Exploring community related NHP-strategies"
+author: "Alexander Lawless"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(DBI)
+library(odbc)
+library(dbplyr)
+library(scales)
+
+# Establish connection with local SQL server ----
+con <- DBI::dbConnect(
+  odbc::odbc(),
+  Driver = "SQL Server",
+  Server = "MLCSU-BI-SQL",
+  Database = "HESdata",
+  Trusted_Connection = "True"
+)
+
+# Specify which strategies (mitigators) are relevant for community work ----
+
+# Pull the strategy look up
+strategy_lookups <- 
+  tbl(
+    con,
+    in_schema("nhp_modelling_reference", "strategy_lookups")
+    ) |>
+  collect()
+
+# Identity strategies relevant to community work
+relevant_strategies <-
+  c(
+    "frail_elderly_high",
+    "frail_elderly_intermediate",
+    "eol_care_2_days",
+    "eol_care_3_to_14_days",
+    "emergency_elderly" # LoS reduction,
+    "falls_related_admissions",
+    "readmission_within_28_days",
+    "zero_los_no_procedure_adult",
+    "zero_los_no_procedure_child",
+    "alcohol_partially_attributable_acute",
+    "alcohol_partially_attributable_chronic",
+    "alcohol_wholly_attributable",
+    "intentional_self_harm",
+    "obesity_related_admissions",
+    "raid_ae",
+    "raid_ip",
+    "medically_unexplained_related_admissions",
+    "medicines_related_admissions_explicit",
+    "medicines_related_admissions_implicit_anti-diabetics",
+    "medicines_related_admissions_implicit_benzodiasepines",
+    "medicines_related_admissions_implicit_diurectics",
+    "medicines_related_admissions_implicit_nsaids",
+    "ambulatory_care_conditions_acute",
+    "ambulatory_care_conditions_chronic",
+    "ambulatory_care_conditions_vaccine_preventable",
+    "smoking",
+    "virtual_wards_activity_avoidance_ari",
+    "virtual_wards_activity_avoidance_heart_failure",
+    "virtual_wards_efficiencies_ari",
+    "virtual_wards_efficiencies_heart_failure"
+  )
+
+# strategies table is every epikey (episode ID) and the strategy it is captured in
+tb_strategies <- 
+  tbl(con,
+      in_schema("nhp_modelling", "strategies")
+  )
+
+community_strategies <- 
+  tb_strategies |> 
+  filter(strategy %in% relevant_strategies)
+
+# To explore raw data within community strategies: inner join tb_inpatients with communities_strategies
+comm_strat_inpatient <-
+  tb_inpatients |>
+  inner_join(strategies_interested_in, "EPIKEY") 
+
+
+```
+
+
+## Explain data acquisition
+
+The following output will detail our approach to isolating acute (inpatient) activity data that could theoretically be provided in community (or non-secondary care) settings.
+
+The data source we utilise is Hospital Episode Statistics (HES) data from 2008/09 to 2022/23.  
+
+### Detail which strategies are used
+
+## Establish scale of underlying data
+
+
+## Initial exploration of underlying data
+
+

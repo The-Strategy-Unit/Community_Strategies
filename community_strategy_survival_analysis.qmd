@@ -1,0 +1,1681 @@
+---
+editor: visual
+execute:
+  echo: false
+  message: false
+  warning: false
+  cache: false
+title: "Community Services Strategy: Survival analysis"
+lang: en-GB
+author: Sarah Lucas
+date: last-modified
+date-format: "YYYY-MM-DD"
+title-block-banner: "#f9bf07"
+title-block-banner-color: "#333739"
+format:
+  html:
+    page-layout: full
+    embed-resources: true
+    smooth-scroll: true
+    theme: cosmo
+    fontcolor: black
+    toc: true
+    toc-location: left
+    toc-title: Summary
+    toc-depth: 3
+css: styles.css
+---
+
+```{r set up}
+
+library(targets)
+library(odbc)
+library(tidyr)
+library(dplyr)
+library(stringr)
+library(janitor)
+library(ggplot2)
+library(StrategyUnitTheme)
+library(survival)
+library(ggfortify)
+library(survminer)
+library(ggsurvfit)
+library(RColorBrewer)
+library(forcats)
+library(flextable)
+library(finalfit)
+library(plotly)
+library(cowplot)
+library(eha)
+library(gridExtra)
+
+source("R/Plots.R")
+source("R/Tables.R")
+
+# Load data (saved files to save time on rerunning the initial formatting)
+#survival_data<-tar_read(survival_data)
+#survival_data_2223<-tar_read(survival_data_2223)
+survival_data_first_readmission_2223<-tar_read(survival_data_first_readmission_2223)
+#deaths_data<-tar_read(deaths_data)
+
+#survival_data_2223_survived_1yr<-tar_read(survival_data_2223_survived_1yr)
+
+
+```
+
+```{r data science server formatting, eval=FALSE}
+# Fetch, format and save data
+
+con <- dbConnect(odbc(), 
+                 Driver = "SQL Server", 
+                 server = "PRODNHSESQL101", 
+                 Database = "NHSE_Sandbox_StrategyUnit")
+ 
+raw_data_survival_analysis <-
+  as_tibble(
+    dbGetQuery(con, '
+SELECT *
+FROM [NHSE_Sandbox_StrategyUnit].[dbo].[nhse_comm_strat_time_to_readmission_final]
+')) |>
+  clean_names()|>
+  filter(der_financial_year!="2024/25")  |> #Remove most recent yr as incomplete
+  filter(!is.na(der_pseudo_nhs_number))|> # Remove those without pseudo_nhs_number as can't link readmissions
+  filter(time_to_readmission>0| is.na(time_to_readmission)) #Some have negative or 0 values think it is linked to date errors and also transfers to different hospitals which starts a new spell.
+
+# Disconnect! # 
+dbDisconnect(con)
+
+load("Z:/Strategic Analytics/Projects 2024/NHSE Community Strategy/raw_data_survival_analysis.RData")
+
+
+
+survival_data<-raw_data_survival_analysis|>
+    rename(icb=icb_name_short)|>
+  mutate(imd_decile=as.character(imd_decile))|>
+  mutate(imd_decile=fct_relevel(imd_decile,c("1","2","3", "4","5","6","7","8","9", "10")))|>
+  mutate(sex=case_when(sex==1 ~ "male",
+                   sex==2 ~ "female"))|>
+  mutate(age_range=(case_when(age_range<60 ~"<60",
+                             age_range==60 ~ "60-64",
+                             age_range==65 ~ "65-69",
+                             age_range==70 ~ "70-74",
+                             age_range==75 ~ "75-79",
+                             age_range==80 ~ "80-84",
+                             age_range==85 ~ "85-89",
+                             age_range>=90 ~ "90+" )))|>
+mutate(ethnicity=case_when(grepl("^A", ethnic_group) ~ "White British",
+                     grepl("^B", ethnic_group)|grepl("^C", ethnic_group) ~ "White Other",
+                     grepl("^D", ethnic_group)|grepl("^E", ethnic_group)| grepl("^F", ethnic_group)|grepl("^G", ethnic_group) ~ "Mixed",
+                     grepl("^H", ethnic_group)|grepl("^J", ethnic_group)| grepl("^K", ethnic_group)|grepl("^L", ethnic_group) ~ "Asian/Asian British",
+                     grepl("^M", ethnic_group)|grepl("^N", ethnic_group)| grepl("^P", ethnic_group) ~ "Black/Black British",
+                     grepl("^R", ethnic_group)|grepl("^S", ethnic_group) ~ "Other",
+                     grepl("^9", ethnic_group)|grepl("^Z", ethnic_group)|is.na(ethnic_group) ~ "Unknown"))|>
+  mutate(ethnicity=fct_relevel(ethnicity, c("Asian/Asian British", "Black/Black British", "Mixed", "Other", "White British", "White Other", "Unknown")))|>
+  mutate(flag_falls=ifelse(!is.na(flag_falls_exp)|!is.na(flag_fall_imp_frac)|!is.na(flag_fall_imp_tend), "falls", NA))|> # Single flag for falls
+  mutate(remove=ifelse((is.na(flag_falls) & is.na(flag_elderly_emergency) & is.na(flag_frail)), "delete", NA))|> #select records that are solely eol for removal as eol patients can't have readmissions as they will have died
+#  mutate(elderly_non_frail=ifelse(is.na(flag_frail) & !is.na(flag_elderly_emergency), "elderly_non_frail", NA))|>  #Flag those that are elderly emergency admission but not frail
+  filter(is.na(remove))|>
+    select(-flag_falls_exp, -flag_fall_imp_frac, -flag_fall_imp_tend, -flag_eol, -remove, -ethnic_group, -time_to_death_from_discharge, -reg_date_of_death)|>
+  pivot_longer( cols = -c("der_financial_year", "sex", "age_range","ethnicity","imd_decile","time_to_readmission", "admission_date", "icb", "der_pseudo_nhs_number", "time_to_death"), 
+                      names_to = "name", values_to="cohort")|>
+  select(-name)|>
+  filter(!is.na(cohort))|>
+  mutate(readmit_28days=ifelse(time_to_readmission>28|is.na(time_to_readmission), 0,1))|>
+  mutate(readmit_1yr=ifelse(time_to_readmission>365|is.na(time_to_readmission), 0,1))|>
+  mutate(time_to_readmit_28days=ifelse((time_to_readmission>28 | is.na(time_to_readmission)), 30, time_to_readmission))|>
+  mutate(time_to_readmit_1yr=ifelse((time_to_readmission>365 | is.na(time_to_readmission)), 370, time_to_readmission))|>
+   mutate(mortality_28days=ifelse(time_to_death>28|is.na(time_to_death), 0,1))|>
+  mutate(mortality_1yr=ifelse(time_to_death>365|is.na(time_to_death), 0,1))|>
+  mutate(time_to_death_28days=ifelse((time_to_death>28 | is.na(time_to_death)), 30, time_to_death))|>
+  mutate(time_to_death_1yr=ifelse((time_to_death>365 | is.na(time_to_death)), 370, time_to_death))|>
+    mutate(remove=ifelse((cohort=="frail" & age_range=="70-74")|(cohort=="elderly emergency" & age_range=="70-74"), 1,0))|>
+    filter(remove==0)|>
+    select(-remove)|>
+  distinct(der_pseudo_nhs_number, admission_date, cohort, .keep_all = TRUE)
+
+save(survival_data, file="Z:/Strategic Analytics/Projects 2024/NHSE Community Strategy/survival_data.RData")
+
+```
+
+## Aims
+
+This analysis aims to investigate the risk of death or subsequent readmission in patients who have had an emergency hospital admission. It will help us understand what factors influence the risk of death or readmission, including determining variability between ICB area. This could help identify where activity might be mitigated through appropriate community services provision.
+
+## Methodology
+
+Three patient cohorts are included within this analysis:
+
+-   **Elderly emergency**: those 75 or over with an emergency admission.
+
+-   **Frail**: those 75 or over with an emergency admission and a frailty score over 5. The frailty score is calculated from ICD-10 diagnoses recorded for admissions during the previous 2 years and using the risk scores in *Gilbert et al (2018), Development and validation of a Hospital Frailty Risk Score focusing on older people in acute care settings using electronic hospital records: an observational study. The Lancet, 391(10132), pp.1775-1782.* (Note these patients are a subset for those in the elderly emergency cohort)
+
+-   **Falls**: those 65 or over with an emergency admission related to a fall.
+
+The **End of life** cohort are not included as by definition they die during their hospital admission.
+
+Survival analysis has been conducted using data from 2023/23 for
+
+-   Time to death (mortality)
+
+-   Time to readmission (time to readmission from the first admission for all patients including some that will have died in the year post-admission)
+
+-   Time to readmission- excluding those who died prior to readmission
+
+Note: Frimley ICB has been removed from the analysis due to missing data.
+
+# Mortality
+
+The time from when a patient first had an emergency admission and first entered the cohort until death was calculated. Those who died on the same day as their emergency admission when they first entered the cohort were excluded.
+
+## Trends in the percentage of deaths over time
+
+```{r fig.width=12, fig.height=4}
+
+## Percentage of admissions with a subsequent readmission between 2019-2024
+
+p1<-tar_read(deaths_over_time_28days)
+
+p2<-tar_read(deaths_over_time_1yr)
+
+grid.arrange(p1, p2, ncol=2)
+
+```
+
+The proportion of patients who die is higher within the elderly emergency and frail cohorts compared to the falls cohort.
+
+Generally the proportion of deaths within either 28 days or 1 year have remained stable over time. A slightly lower percentage of deaths within 1 year is to be expected for those first admitted in 2023/24 as there is not a full year of follow-up and some deaths will have not yet occurred.
+
+## Comparing time to death between the cohorts using Kaplan-meier plot (2022/23)
+
+For those first admitted in 2022/23 we considered the time to death from when the person was first admitted. The most recent year 2023/2024 was not used as there has not be sufficient time for those that entered the cohort at the end of this year to have a full year of follow-up time.
+
+```{r comparing cohorts deaths, fig.width=10, fig.height=6}
+
+tar_read(comparing_cohorts_deaths)
+
+# log rank
+#survdiff(Surv(time_to_death_1yr, death_1yr) ~ cohort, data = deaths_data)
+```
+
+The risk of death is highest in the frail cohort, followed by the elderly emergency cohort, with those in the falls cohort have a lowest risk of death.
+
+## Kaplan Meier survival plots of time to death (2022/23)
+
+::: panel-tabset
+#### Elderly emergency cohort
+
+::: {.callout-note icon="false"}
+#### Summary
+
+The risk of death is increased:
+
+-   with age
+
+-   in males
+
+-   with increasing deprivation
+
+-   in those who are White British, compared to all other those of other ethnicities
+
+There is some variation between ICBs in the risk of death with the lowest risk seen in the North West London ICB area.
+:::
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_age_elderly_emergency_deaths)
+
+```
+
+```{r, eval=FALSE}
+
+
+  dataset<-deaths_data|>
+    filter(cohort=="elderly emergency")
+  
+  fit <- survfit2(Surv(time_to_death_1yr, mortality_1yr) ~icb, data = dataset)
+  
+plotly::ggplotly(
+   km_graph(fit, "icb=", "death") +
+     labs(title=paste0("Survival time to "," by ICB for the "," cohort"))+
+   theme(legend.position = "none",
+         axis.text=element_text(size=12),
+         axis.title=element_text(size=14),
+         title=element_text(size=12, hjust = 0, face="bold" ),
+         plot.margin = margin(0.5, 0.2, 0.5, 0.2, "cm")),
+   width=800, height=500)
+
+
+
+```
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_sex_elderly_emergency_deaths)
+```
+
+```{r, fig.width=10, fig.height=6.5}
+tar_read(km_ethnicity_elderly_emergency_deaths)
+```
+
+```{r, fig.width=8, fig.height=6.5}
+tar_read(km_imd_elderly_emergency_deaths)
+```
+
+```{r, fig.width=7.5, fig.height=4.5}
+tar_read(km_icb_elderly_emergency_deaths)
+```
+
+<br>
+
+```{r}
+tar_read(icb_table_deaths_elderly_emergency)
+
+```
+
+#### Falls cohort
+
+::: {.callout-note icon="false"}
+#### Summary
+
+The risk of death is increased:
+
+-   with age
+
+-   in males
+
+-   with increasing deprivation
+
+-   in those who are White British, compared to all other those of other ethnicities
+
+There is some variation between ICBs in the risk of death, with many of the London ICB areas having a lower risk of death.
+:::
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_age_falls_deaths)
+```
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_sex_falls_deaths)
+```
+
+```{r, fig.width=10, fig.height=6.5}
+tar_read(km_ethnicity_falls_deaths)
+```
+
+```{r, fig.width=8, fig.height=6.5}
+tar_read(km_imd_falls_deaths)
+```
+
+```{r, fig.width=7.5, fig.height=4.5}
+tar_read(km_icb_falls_deaths)
+```
+
+<br>
+
+```{r}
+tar_read(icb_table_deaths_falls)
+```
+
+#### Frail cohort
+
+::: {.callout-note icon="false"}
+#### Summary
+
+The risk of death is increased:
+
+-   with age
+
+-   in males
+
+-   with increasing deprivation
+
+-   in those who are White British, compared to all other those of other ethnicities
+
+There is some variation between ICBs in the risk of death, with the lowest risk of death seen in the North West London ICB area.
+:::
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_age_frail_deaths)
+```
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_sex_frail_deaths)
+```
+
+```{r, fig.width=10, fig.height=6.5}
+tar_read(km_ethnicity_frail_deaths)
+```
+
+```{r, fig.width=8, fig.height=6.5}
+tar_read(km_imd_frail_deaths)
+```
+
+```{r, fig.width=7.5, fig.height=4.5}
+tar_read(km_icb_frail_deaths)
+```
+
+<br>
+
+```{r}
+tar_read(icb_table_deaths_frail)
+```
+:::
+
+## Multivariate survival analysis of time to death (2022/23)
+
+For this analysis we have taken only data from 2022-2023, and only the first admission for each patient. We have excluded admissions where the person died on the day of admission.
+
+We have fitted multivariate Cox proportional hazard models to our data to assess how various factors independently affect the risk of readmission occurring over time.
+
+### Assumptions of Cox proportional hazards models {#sec-Assumptions-of-Cox-proportional-hazards-models}
+
+Cox proportional hazards models assume that the hazard rate (in this case risk of death) for a person with one set of covariates is proportional to the hazard rate for a person with a different set of covariates, so that the hazard ratio is assumed to be constant over time.
+
+The proportional hazards (PH) assumption can be checked using statistical tests and graphical diagnostics based on the scaled Schoenfeld residuals.
+
+We find significant p-values for some covariates, particularly for ICBs, indicating that the data violates the proportional hazards assumption. This is unsurprising as we have very high number of patients included within our dataset, which means even very small deviations in the residuals over time can result in significant p-values.
+
+Plotting a smoothed fit to the Schoenfeld residuals allows us to determine, where p-values are significant, whether the changes in the beta coefficient over time are large enough to meaningfully impact our analyses. Deviations from a horizontal line indicate non-proportional hazards, and that the hazard ratio will be changing over time.
+
+There are alternatives when the proportional hazards assumption is violated such as adding a time interaction into the model or using an alternative accelerated failure model. With the size of our dataset and the number of covariates (over 40 ICBs) the alternatives do not appear feasible and would unlikely add useful information to our conclusions.
+
+Considering these factors and that for this analysis the degree of variation and trends are more important than the absolute hazard ratios we have used a Cox proportional hazards models, and the calculated hazard ratios can be considered as a time-averaged hazard ratio. We have modelled the risk of death within 28 days and within 1 yr. Considering the first 28 day period alongside the 1 year time period means we can check for any initial differences in the first 28 days that might be averaged out in the long 1 year period. There are some differences in the hazard ratios calculated for the two models, but the general trends are consistent.
+
+### Elderly emergency
+
+::: panel-tabset
+#### Cox proportional hazards model 28 days
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_death_28days_elderly_emergency))
+
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_28days_elderly_emergency)
+
+
+tar_read(ph_categories_death_28days_elderly_emergency)
+
+
+#Deviation from a zero-slope line is evidence that the proportional hazards assumption is violated
+
+tar_read(schoenfeld_residuals_death_28days_elderly_emergency)
+
+
+# Testing Influential Observations
+
+#ggcoxdiagnostics(fit_elderly_emergency_28days, type = "dfbeta",
+#                 linear.predictions = FALSE, ggtheme = theme_bw())
+
+#ggcoxdiagnostics(fit_elderly_emergency_28days, type = "deviance",
+#                 linear.predictions = FALSE, ggtheme = theme_bw())
+
+
+```
+
+#### Cox proportional hazards model 1 year
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_death_1yr_elderly_emergency))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+#tar_read(ph_individual_variables_1yr_elderly_emergency)
+
+tar_read(ph_categories_death_1yr_elderly_emergency)
+
+
+tar_read(schoenfeld_residuals_death_1yr_elderly_emergency)
+
+```
+:::
+
+::: {.callout-note icon="false"}
+#### Summary
+
+In the elderly emergency cohort the risk of death post-admission:
+
+-   is higher in males.
+
+-   increases with increasing age.
+
+-   up to 28 days those who are Black/Black British or White Other ethnicity have a lower risk of death compared to White British, while Other and Unknown ethnicities have an increased risk. In the 1 year post-admission the risk of death is lower compared to White British for all other ethnicities, apart from Unknown.
+
+-   increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) have a higher risk of death than those living in the least deprived areas (IMD decile 10).
+
+-   varies by ICB area. The risk of death is lowest in the North West London ICB area and highest in the Norfolk and Waveney ICB area.
+:::
+
+### Falls
+
+::: panel-tabset
+#### Cox proportional hazards model 28 days
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_death_28days_falls))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_28days_falls)
+
+tar_read(ph_categories_death_28days_falls)
+
+tar_read(schoenfeld_residuals_death_28days_falls)
+
+
+```
+
+#### Cox proportional hazards model 1 year
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_death_1yr_falls))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_1yr_falls)
+
+tar_read(ph_categories_death_1yr_falls)
+
+tar_read(schoenfeld_residuals_death_1yr_falls)
+
+
+```
+:::
+
+::: {.callout-note icon="false"}
+#### Summary
+
+In the falls cohort the risk of death post-admission:
+
+-   is higher in males.
+
+-   increases with increasing age.
+
+-   up to 28 days those who are Asian/Asian British, Black/Black British, Other or Unknown ethnicity have a lower risk of death compared to White British. In the year post-admission the risk of death is lower for those who are Black/Black British or White Other ethnicities compared to White British.
+
+-   up to 28days is not as clearly correlated with deprivation. However, in the year post-admission risk of death increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) have a higher risk of death than those living in the least deprived areas (IMD decile 10).
+
+-   varies by ICB area. The risk of death in the year post-admission is lowest in the North West London ICB and North Central London ICB areas, and highest in the Gloucestershire ICB and Mind and South Essex ICB areas. In the 28 days post-admission the risk of readmission is lowest in the South East London ICB area, and highest in the Gloucestershire ICB area.
+:::
+
+### Frail
+
+::: panel-tabset
+#### Cox proportional hazards model 28 days
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_death_28days_frail))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_28days_frail)
+
+tar_read(ph_categories_death_28days_frail)
+
+tar_read(schoenfeld_residuals_death_28days_frail)
+
+
+```
+
+#### Cox proportional hazards model 1 year
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_death_1yr_frail))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_1yr_frail)
+
+tar_read(ph_categories_death_1yr_frail)
+
+tar_read(schoenfeld_residuals_death_1yr_frail)
+
+
+```
+:::
+
+::: {.callout-note icon="false"}
+#### Summary
+
+In the frail cohort the risk of death post-admission:
+
+-   is higher in males.
+
+-   increases with increasing age.
+
+-   up to 28 days those who are of Unknown ethnicity have a higher risk of death compared to White British. While in the 1 year post-admission the risk of death is lower for those of Asian/Asian British, Black/Black British and Other ethnicities compared to White British.
+
+-   increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) have a higher risk of death than those living in the least deprived areas (IMD decile 10).
+
+-   varies by ICB area. The risk of death in the year post-admission is lowest in the North West London ICB and Dorset ICB areas and highest in the Humber and North Yorkshire ICB and Hereford and Worcestershire ICB areas. In the 28 days post-admission the risk of readmission is lowest in the North West London ICB and Hampshire and Isle of Wight ICB areas, and highest in the Hereford and Worcestershire ICB and Cornwall and Isles of Scilly ICB areas.
+:::
+
+### Number of deaths on day of admission by ethnicity
+
+For the survival analysis we excluded anyone who died on the day of first admission, so given the differences seen in the risk of death by ethnicity we have checked whether there are differences in the percentage of patients who die on the day of first admission by ethnicity.
+
+```{r}
+
+survival_data_first_readmission_2223|>
+  group_by(ethnicity)|>
+  summarise(total=n())|>
+  left_join(survival_data_first_readmission_2223|>
+              filter(time_to_death==0)|>
+                group_by(ethnicity)|>
+               summarise(number_died=n()), by=c("ethnicity"))|>
+  mutate(percentage=round((number_died/total)*100,2))|>
+  select(ethnicity, percentage)|>
+ flextable() |>
+    set_header_labels(ethnicity="Ethnicity",
+                      percentage="Percentage who die on day of admissions")|>
+    align(part = "header", align = "center")|>
+    align(j=1, align = "left")|>
+    align(part = "body", align = "center")|>
+    align(j=1, part="body", align="left")|>
+    align(j=1, part="header", align="left")|>
+    bg(bg = "#f9bf07", part = "header") |>
+    bold(i = 1, bold = TRUE, part="header")|>
+    fontsize(size = 11, part = "all")|>
+    padding(padding = 1, part = "all", padding.top=NULL) |>
+    autofit()|>
+    htmltools_value(ft.align = "left")    
+
+```
+
+The percentage of patient who die on the day of admission is slightly higher for those who are Asian/Asian British and of Unknown ethnicity compared to those who are White British.
+
+# Readmissions
+
+```{r readmission barchart 28days, fig.width=8, fig.height=3, eval=FALSE }
+
+## Percentage of admissions with a subsequent readmission between 2019-2024
+
+p1<-tar_read(readmission_barchart_28days)
+
+p2<-tar_read(readmission_barchart_1yr)
+
+grid.arrange(p1, p2, ncol=2)
+
+```
+
+## Trends in the percentage of admissions with a subsequent readmission over time
+
+```{r readmission over time 28days, fig.width=12, fig.height=4}
+
+p1<-tar_read(readmission_over_time_28days)
+p2<-tar_read(readmission_over_time_1yr)
+
+grid.arrange(p1, p2, ncol=2)
+```
+
+Generally the proportion of admissions that have resulted in a readmission within either 28 days or 1 year have remained stable over time.
+
+The proportion of patient with a readmission is higher in the elderly emergency and frail cohorts compared to the falls cohort.
+
+A lower percentage of readmissions within 1 year is to be expected for those admitted in 2023/24 as there is not a full year of follow-up and some readmissions will have not yet occurred.
+
+## Number of readmissions in 2022/2023
+
+```{r mean and median}
+
+mean_median_admissions<-tar_read(mean_median_admissions)
+
+mean_median_admissions|>
+  select(cohort, mean, median, min, lower_quartile, upper_quartile, max)|>
+  flextable() |>
+    set_header_labels(lower_quartile="lower quartile",
+                      upper_quartile="upper quartile")|>
+    align(part = "header", align = "center")|>
+    align(j=1, align = "left")|>
+    align(part = "body", align = "center")|>
+    align(j=1, part="body", align="left")|>
+    align(j=1, part="header", align="left")|>
+    bg(bg = "#f9bf07", part = "header") |>
+    bold(i = 1, bold = TRUE, part="header")|>
+    fontsize(size = 11, part = "all")|>
+    padding(padding = 1, part = "all", padding.top=NULL) |>
+    autofit()|>
+    htmltools_value(ft.align = "left")    
+
+#tar_read(numbers_of_readmissions)
+  
+```
+
+The majority of patients have no readmission within a year, and of those that do have a readmission it is most common to just have a single readmission. A small number of patients are having more regular emergency admissions; those with a highest rates appear to be often admitted and discharged on the same day.
+
+## Comparing time to readmission between the cohorts using Kaplan-meier plots (2022/23)
+
+::: panel-tabset
+#### All readmissions included
+
+Survival analysis was conducted where each admission is treated as an independent event. This means some patients who had multiple admissions within 2022/23 will be included multiple times.
+
+```{r comparing cohorts, fig.width=10, fig.height=6}
+
+tar_read(comparing_cohorts)
+
+# log rank
+#survdiff(Surv(time_to_readmit_1yr, readmit_1yr) ~ cohort, data = survival_data_2223)
+```
+
+#### Only first readmission
+
+Survival analysis was conducted using a patient's first admission within 2022/23, so only one event is included per patient, even if the patient has multiple admissions over the year.
+
+```{r comparing cohorts first readmission only, fig.width=10, fig.height=6}
+# Without duplicates
+
+
+tar_read(comparing_cohorts_without_duplicates)
+
+```
+:::
+
+The risk of readmission is very similar between the elderly emergency and frail cohorts (note the frail cohort is a subset of the elderly emergency cohort). Those in the falls cohort have a lower risk of readmission.
+
+The risk of admissions is increased slightly by a small subset of patients that have multiple readmissions, as the risk of readmission decreases if only the first admission/ readmission is included for each patient.
+
+## Kaplan Meier survival plots of time to readmission (2022/23)
+
+For these plots each admission in 2022/23 was treated as an independent event, meaning that some patients who had multiple admissions within 2022/23 will be included multiple times.
+
+::: panel-tabset
+#### Elderly emergency cohort
+
+::: {.callout-note icon="false"}
+#### Summary
+
+The risk of readmission is higher in those who are:
+
+-   aged 80-89, compared to those aged 75-79 or 90+.
+
+-   male
+
+-   Asian/Asian British or Black/Black British compared to White British
+
+-   living in a more deprived area
+
+The risk of readmission varies by ICB area, with a lower risk of readmission in the Dorset, Gloucestershire and Cornwall and Isles of Scilly ICB areas and a higher risk in the North West London ICB area.
+:::
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_age_elderly_emergency)
+```
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_sex_elderly_emergency)
+```
+
+```{r, fig.width=10, fig.height=6.5}
+tar_read(km_ethnicity_elderly_emergency)
+```
+
+```{r, fig.width=8, fig.height=6.5}
+tar_read(km_imd_elderly_emergency)
+```
+
+```{r, fig.width=7.5, fig.height=4.5}
+
+tar_read(km_icb_elderly_emergency)
+```
+
+<br>
+
+```{r}
+tar_read(icb_table_elderly_emergency)
+
+```
+
+#### Falls cohort
+
+::: {.callout-note icon="false"}
+#### Summary
+
+The risk of readmission is higher in those who are:
+
+-   aged over 75 years.
+
+-   male
+
+-   Black/Black British
+
+In this falls cohort there is no clear association between deprivation and risk of readmission.
+
+The risk of readmission varies by ICB area.
+:::
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_age_falls)
+```
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_sex_falls)
+```
+
+```{r, fig.width=10, fig.height=6.5}
+tar_read(km_ethnicity_falls)
+```
+
+```{r, fig.width=8, fig.height=6.5}
+tar_read(km_imd_falls)
+```
+
+```{r, fig.width=7.5, fig.height=4.5}
+tar_read(km_icb_falls)
+```
+
+<br>
+
+```{r}
+tar_read(icb_table_falls)
+```
+
+#### Frail cohort
+
+::: {.callout-note icon="false"}
+#### Summary
+
+The risk of readmission is higher in those who are:
+
+-   aged 80-89 years, followed by those aged 75-79 years. Those aged 90+ years had the lowest risk of readmission
+
+-   male
+
+-   Black/Black British
+
+-   living in the most deprived areas
+
+The risk of readmission varies by ICB area, with a lower risk of readmission in the Gloucestershire and Cornwall and Isles of Scilly ICB areas and a higher risk in the North West London ICB area.
+:::
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_age_frail)
+```
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_sex_frail)
+```
+
+```{r, fig.width=10, fig.height=6.5}
+tar_read(km_ethnicity_frail)
+```
+
+```{r, fig.width=8, fig.height=6.5}
+tar_read(km_imd_frail)
+```
+
+```{r, fig.width=7.5, fig.height=4.5}
+
+tar_read(km_icb_frail)
+```
+
+<br>
+
+```{r}
+tar_read(icb_table_frail)
+```
+:::
+
+## Multivariate survival analysis of time to readmission (2022/23)
+
+For this analysis we have taken only data from 2022-2023, and only the first admission/time to readmission for each patient.
+
+We have fitted Cox proportional hazard models to our data to assess how various factors independently affect the risk of readmission occurring over time.
+
+For information on the testing of the proportional hazards assumption see @sec-Assumptions-of-Cox-proportional-hazards-models.
+
+We have used a Cox proportional hazards models and the calculated hazard ratios can be considered as a time-averaged hazard ratio. We have considered models for readmission within 28 days and within 1 yr. There are some differences between the hazard ratios calculated for the two models, but the general trends are consistent.
+
+```{r, fig.width=10, fig.height=14, eval=FALSE}
+
+sig<- survival_data_first_readmission_2223|>
+    filter(!is.na(icb))|>
+    filter(cohort=="elderly emergency")|>
+  coxphmulti(dependent="Surv(time_to_readmit_28days,readmit_28days)", explanatory = c("sex","age_range", "ethnicity" , "imd_decile" ,"icb"))|>
+  fit2df()|>
+      mutate(p_value= substring(HR,20,24))|>
+    mutate(p_value=as.numeric(p_value))|>
+    mutate(HR= substring(HR,1,4))|>
+  mutate(HR=as.numeric(HR))|>
+  mutate(colour_group=case_when(HR>1 & p_value<0.05 ~ "increase", 
+                                HR<1 & p_value<0.05 ~ "decrease", TRUE~ "no change"))
+
+ 
+```
+
+### Elderly emergency
+
+::: panel-tabset
+#### Cox proportional hazards model 28 days
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_28days_elderly_emergency))
+
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_28days_elderly_emergency)
+
+
+tar_read(ph_categories_28days_elderly_emergency)
+
+
+#Deviation from a zero-slope line is evidence that the proportional hazards assumption is violated
+
+tar_read(schoenfeld_residuals_28days_elderly_emergency)
+
+
+# Testing Influential Observations
+
+#ggcoxdiagnostics(fit_elderly_emergency_28days, type = "dfbeta",
+#                 linear.predictions = FALSE, ggtheme = theme_bw())
+
+#ggcoxdiagnostics(fit_elderly_emergency_28days, type = "deviance",
+#                 linear.predictions = FALSE, ggtheme = theme_bw())
+
+
+```
+
+#### Cox proportional hazards model 1 year
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_1yr_elderly_emergency))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+#tar_read(ph_individual_variables_1yr_elderly_emergency)
+
+tar_read(ph_categories_1yr_elderly_emergency)
+
+
+tar_read(schoenfeld_residuals_1yr_elderly_emergency)
+
+```
+:::
+
+::: {.callout-note icon="false"}
+#### Summary
+
+In the elderly emergency cohort the risk of readmission:
+
+-   is higher in males.
+
+-   is higher in those aged 80-89 years compared to those aged 75-79 years. Up to 28 days the risk of readmission in those aged 90+ is no higher than those aged 75-79 years, but in the full year after admission the risk of readmission is higher in those over 90 years than those aged 75-79 years. This may be influenced by the risk of death being significantly different between those aged 75-79 years and those aged over 90.
+
+-   is higher in those who are White British, and significantly lower in those who are Asian/Asian British, Black/Black British, Other or Unknown ethnicity. Up to 28 days those of mixed ethnicity have a similar risk of readmission to White British, but in the analysis, but the risk drops below that of White British in the analysis to 1 year.
+
+-   increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) are more likely to be readmitted than those living in the least deprived areas (IMD decile 10). 
+
+-   varies by ICB area. The risk of readmission is lowest in the Cornwall and Isles of Scilly ICB area. In the year post-admission the risk of readmission is highest in South East London ICB and North West London ICB areas. While up to 28 days post-admission the risk is highest in the North East London ICB area.
+:::
+
+### Falls
+
+::: panel-tabset
+#### Cox proportional hazards model 28 days
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_28days_falls))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_28days_falls)
+
+tar_read(ph_categories_28days_falls)
+
+tar_read(schoenfeld_residuals_28days_falls)
+
+
+```
+
+#### Cox proportional hazards model 1 year
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_1yr_falls))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_1yr_falls)
+
+tar_read(ph_categories_1yr_falls)
+
+tar_read(schoenfeld_residuals_1yr_falls)
+
+
+```
+:::
+
+::: {.callout-note icon="false"}
+#### Summary
+
+In the falls cohort the risk of readmission:
+
+-   is higher in males.
+
+-   is higher in those aged over 70 years compared to those aged 60-64 years.
+
+-   is lower in those of Unknown ethnicity compared to White British. In the analysis to 1 year the risk of readmission is significantly higher in those who are Black/Black British compared to those who are White British.
+
+-   increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) are more likely to be readmitted than those living in the least deprived areas (IMD decile 10).
+
+-   varies by ICB area. The risk of readmission in the year post-admission is lowest in the Cornwall and Isles of Scilly ICB and Gloucestershire ICB areas and highest in the South East London ICB and Northamptonshire ICB areas. In the 28 days post-admission the risk of readmission is lowest in the Gloucestershire ICB and Hereford and Worcestershire ICB areas, and highest in the North West London ICB and Staffordshire and Stoke-on-Trent ICB areas.
+:::
+
+### Frail
+
+::: panel-tabset
+#### Cox proportional hazards model 28 days
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_28days_frail))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_28days_frail)
+
+tar_read(ph_categories_28days_frail)
+
+tar_read(schoenfeld_residuals_28days_frail)
+
+
+```
+
+#### Cox proportional hazards model 1 year
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_1yr_frail))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_1yr_frail)
+
+tar_read(ph_categories_1yr_frail)
+
+tar_read(schoenfeld_residuals_1yr_frail)
+
+
+```
+:::
+
+::: {.callout-note icon="false"}
+#### Summary
+
+In the frail cohort the risk of readmission:
+
+-   is higher in males.
+
+-   up to 28days age does not significantly influence the risk of readmission.However, in the year post admission the risk of readmission is higher in those aged over 80 years compared to those aged 75-79 years.
+
+-   is higher in those who are White British, and significantly lower in those who are Asian/Asian British, Other and Unknown ethnicity. Up to 28 days those who are Black/Black British also have a lower risk of readmission compared to White British, but the risk is no longer reduced in the analysis to 1 year.
+
+-   increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) are more likely to be readmitted than those living in the least deprived areas (IMD decile 10).
+
+-   varies by ICB area. The risk of readmission in the year post-admission is lowest in the Cornwall and Isles of Scilly ICB and Gloucestershire ICB areas and highest in the South East London ICB and North West London ICB areas. In the 28 days post-admission the risk of readmission is lowest in the Cornwall and Isles of Scilly ICB and Norfolk and Waveney ICB areas, and highest in the Staffordshire and Stoke-on-Trent ICB and Surrey Heartlands ICB areas.
+:::
+
+```{r, eval=FALSE}
+
+#Accelerated failure time models
+
+#When the proportional hazards assumption is violated an alternative to the Cox proportional hazards model is the accelerated failure time (AFT) model. The AFT model assumes that, rather than the effect of a covariate is to multiply the hazard by a constant as the in Cox proportional hazards models, that the effect of a covariate is to accelerate or decelerate the time course by a constant.
+
+
+
+elderly_emergency<-survival_data_first_readmission_2223|> 
+  filter(cohort=="elderly emergency")
+
+fit_aft_elderly_emergency_28days <- aftreg(Surv(time_to_readmit_28days, readmit_28days) ~ sex +age_range + ethnicity + imd_decile + icb, data = elderly_emergency, id = der_pseudo_nhs_number, dist = "gompertz")
+
+
+
+
+```
+
+# Readmissions- excluding those who died prior to readmission
+
+In the previous analysis of readmissions we see that some of the ICB areas with the lowest readmission rates are those with higher mortality rates. Given that the risk of readmission will be strongly influenced by the mortality rate for this analysis we have excluded all those that died prior to readmission at either 28 days or 1 year. This gives us the risk of readmission for those that survived to the end of the time period of interest, either 28 days or 1 year.
+
+## Comparing time to readmission between the cohorts using Kaplan-meier plots (2022/23)
+
+::: panel-tabset
+#### All readmissions included
+
+Survival analysis was conducted where each admission is treated as an independent event. This means some patients who had multiple admissions within 2022/23 will be included multiple times.
+
+```{r, fig.width=10, fig.height=6}
+
+tar_read(comparing_cohorts_survived_1yr)
+
+# log rank
+#survdiff(Surv(time_to_readmit_1yr, readmit_1yr) ~ cohort, data = survival_data_2223)
+```
+
+#### Only first readmission
+
+Survival analysis was conducted using a patient's first admission within 2022/23, so only one event is included per patient, even if the patient has multiple admissions over the year.
+
+```{r, fig.width=10, fig.height=6}
+# Without duplicates
+
+
+tar_read(comparing_cohorts_without_duplicates_survived_1yr)
+
+```
+:::
+
+The risk of readmission is very similar between the elderly emergency and frail cohorts (note the frail cohort is a subset of the elderly emergency cohort). Those in the falls cohort have a lower risk of readmission.
+
+The risk of admissions is increased slightly by a small subset of patients that have multiple readmissions, as the risk of readmission decreases if only the first admission/ readmission is included for each patient.
+
+## Kaplan Meier survival plots of time to readmission (2022/23)
+
+For these plots each admission in 2022/23 was treated as an independent event, meaning that some patients who had multiple admissions within 2022/23 will be included multiple times.
+
+::: panel-tabset
+#### Elderly emergency cohort
+
+::: {.callout-note icon="false"}
+#### Summary
+
+The risk of readmission is higher in those who are:
+
+-   older
+
+-   male
+
+-   Black/Black British
+
+-   living in a more deprived area
+
+The risk of readmission varies by ICB area, with a lower risk of readmission in the Dorset, Gloucestershire and Cornwall and Isles of Scilly ICB areas.
+:::
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_age_elderly_emergency_survived_1yr)
+```
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_sex_elderly_emergency_survived_1yr)
+```
+
+```{r, fig.width=10, fig.height=6.5}
+tar_read(km_ethnicity_elderly_emergency_survived_1yr)
+```
+
+```{r, fig.width=8, fig.height=6.5}
+tar_read(km_imd_elderly_emergency_survived_1yr)
+```
+
+```{r, fig.width=7.5, fig.height=4.5}
+
+tar_read(km_icb_elderly_emergency_survived_1yr)
+```
+
+<br>
+
+```{r}
+tar_read(icb_table_elderly_emergency_survived_1yr)
+
+```
+
+#### Falls cohort
+
+::: {.callout-note icon="false"}
+#### Summary
+
+The risk of readmission is higher in those who are:
+
+-   older
+
+-   male
+
+-   Black/Black British
+
+-   living in a more deprived area
+
+The risk of readmission varies by ICB area.
+:::
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_age_falls_survived_1yr)
+```
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_sex_falls_survived_1yr)
+```
+
+```{r, fig.width=10, fig.height=6.5}
+tar_read(km_ethnicity_falls_survived_1yr)
+```
+
+```{r, fig.width=8, fig.height=6.5}
+tar_read(km_imd_falls_survived_1yr)
+```
+
+```{r, fig.width=7.5, fig.height=4.5}
+tar_read(km_icb_falls_survived_1yr)
+```
+
+<br>
+
+```{r}
+tar_read(icb_table_falls_survived_1yr)
+```
+
+#### Frail cohort
+
+::: {.callout-note icon="false"}
+#### Summary
+
+The risk of readmission is higher in those who are:
+
+-   older
+
+-   male
+
+-   Black/Black British
+
+-   living in the more deprived areas
+
+The risk of readmission varies by ICB area, with a lower risk of readmission in the Dorset, Gloucestershire and Cornwall and Isles of Scilly ICB areas.
+:::
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_age_frail_survived_1yr)
+```
+
+```{r, fig.width=8, fig.height=5}
+tar_read(km_sex_frail_survived_1yr)
+```
+
+```{r, fig.width=10, fig.height=6.5}
+tar_read(km_ethnicity_frail_survived_1yr)
+```
+
+```{r, fig.width=8, fig.height=6.5}
+tar_read(km_imd_frail_survived_1yr)
+```
+
+```{r, fig.width=7.5, fig.height=4.5}
+
+tar_read(km_icb_frail_survived_1yr)
+```
+
+<br>
+
+```{r}
+tar_read(icb_table_frail_survived_1yr)
+```
+:::
+
+## Multivariate survival analysis of time to readmission (2022/23)
+
+For this analysis we have taken only data from 2022-2023, and only the first admission/time to readmission for each patient.
+
+We have fitted Cox proportional hazard models to our data to assess how various factors independently affect the risk of readmission occurring over time.
+
+For information on the testing of the proportional hazards assumption see @sec-Assumptions-of-Cox-proportional-hazards-models.
+
+We have used a Cox proportional hazards models and the calculated hazard ratios can be considered as a time-averaged hazard ratio. We have considered models for readmission within 28 days and within 1 yr. There are some differences between the hazard ratios calculated for the two models, but the general trends are consistent.
+
+### Elderly emergency
+
+::: panel-tabset
+#### Cox proportional hazards model 28 days
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_28days_elderly_emergency_survived_28days))
+
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_28days_elderly_emergency)
+
+
+tar_read(ph_categories_28days_elderly_emergency_survived_28days)
+
+
+#Deviation from a zero-slope line is evidence that the proportional hazards assumption is violated
+
+tar_read(schoenfeld_residuals_28days_elderly_emergency_survived_28days)
+
+
+# Testing Influential Observations
+
+#ggcoxdiagnostics(fit_elderly_emergency_28days, type = "dfbeta",
+#                 linear.predictions = FALSE, ggtheme = theme_bw())
+
+#ggcoxdiagnostics(fit_elderly_emergency_28days, type = "deviance",
+#                 linear.predictions = FALSE, ggtheme = theme_bw())
+
+
+```
+
+#### Cox proportional hazards model 1 year
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_1yr_elderly_emergency_survived_1yr))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+#tar_read(ph_individual_variables_1yr_elderly_emergency)
+
+tar_read(ph_categories_1yr_elderly_emergency_survived_1yr)
+
+
+tar_read(schoenfeld_residuals_1yr_elderly_emergency_survived_1yr)
+
+```
+:::
+
+::: {.callout-note icon="false"}
+#### Summary
+
+In the elderly emergency cohort the risk of readmission:
+
+-   is higher in males.
+
+-   increases with increasing age
+
+-   is higher in those who are White British, and significantly lower in those who are Asian/Asian British, Black/Black British, Other or Unknown ethnicity. Up to 28 days those of mixed ethnicity have a similar risk of readmission to White British, but in the analysis, but the risk drops below that of White British in the analysis to 1 year.
+
+-   increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) are more likely to be readmitted than those living in the least deprived areas (IMD decile 10).
+
+-   varies by ICB area. The risk of readmission is lowest in the Cornwall and Isles of Scilly ICB ares. In the year post-admission the risk of readmission is highest in South East London ICB and Northamptonshire areas. While up to 28 days post-admission the risk is highest in the North East London ICB and South East London ICB areas.
+:::
+
+### Falls
+
+::: panel-tabset
+#### Cox proportional hazards model 28 days
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_28days_falls_survived_28days))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_28days_falls)
+
+tar_read(ph_categories_28days_falls_survived_28days)
+
+tar_read(schoenfeld_residuals_28days_falls_survived_28days)
+
+
+```
+
+#### Cox proportional hazards model 1 year
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_1yr_falls_survived_1yr))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_1yr_falls)
+
+tar_read(ph_categories_1yr_falls_survived_1yr)
+
+tar_read(schoenfeld_residuals_1yr_falls_survived_1yr)
+
+
+```
+:::
+
+::: {.callout-note icon="false"}
+#### Summary
+
+In the falls cohort the risk of readmission:
+
+-   is higher in males.
+
+-   is higher in those aged over 70 years compared to those aged 60-64 years.
+
+-   is lower in those of Unknown ethnicity compared to White British. In the analysis to 1 year post-admission the risk of readmission is also significantly lower in those who are Asian/Asian British or from Other ethnic backgrounds.
+
+-   increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) are more likely to be readmitted than those living in the least deprived areas (IMD decile 10).
+
+-   varies by ICB area. The risk of readmission in the year post-admission is lowest in the Cornwall and Isles of Scilly ICB and Gloucestershire ICB areas and highest in the South East London ICB and Northamptonshire ICB areas. In the 28 days post-admission the risk of readmission is lowest in the Leicester, Leicestershire and Rutland ICB and Hereford and Worcestershire ICB areas, and highest in the North West London ICB and Staffordshire and Stoke-on-Trent ICB areas.
+:::
+
+### Frail
+
+::: panel-tabset
+#### Cox proportional hazards model 28 days
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_28days_frail_survived_28days))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_28days_frail)
+
+tar_read(ph_categories_28days_frail_survived_28days)
+
+tar_read(schoenfeld_residuals_28days_frail_survived_28days)
+
+
+```
+
+#### Cox proportional hazards model 1 year
+
+::: columns
+::: {.column width="75%"}
+```{r, fig.width=10, fig.height=11}
+
+grid::grid.newpage()
+grid::grid.draw(tar_read(cox_forestplot_1yr_frail_survived_1yr))
+
+```
+
+::: {style="font-size: 80%;"}
+Forest plot of hazard ratios. Black indicates no significant difference compared to the reference group, red indicates a significant increase in the hazard ratio (risk) and green indicates a significant decrease. The size of the point gives an indication of the relative number of people in each group.
+:::
+:::
+:::
+
+#### Testing assumptions
+
+```{r, fig.width=10, fig.height=8}
+
+# Testing Proportional Hazards Assumption (proportional hazards assumption is reasonable if p-values are non-sig)
+
+#tar_read(ph_individual_variables_1yr_frail)
+
+tar_read(ph_categories_1yr_frail_survived_1yr)
+
+tar_read(schoenfeld_residuals_1yr_frail_survived_1yr)
+
+
+```
+:::
+
+::: {.callout-note icon="false"}
+#### Summary
+
+In the frail cohort the risk of readmission:
+
+-   is higher in males.
+
+-   increases with increasing age.
+
+-   is higher in those who are White British, and significantly lower in those who are Asian/Asian British, Black/Black British, Other and Unknown ethnicity. In the analysis to one year post-admission those who are White Other also have a significantly lower risk of readmission.
+
+-   increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) are more likely to be readmitted than those living in the least deprived areas (IMD decile 10).
+
+-   varies by ICB area. The risk of readmission in the year post-admission is lowest in the and Gloucestershire ICB and Cornwall and Isles of Scilly ICB areas and highest in the Staffordshire and Stoke-on-Trent ICB and Northamptonshire ICB areas. In the 28 days post-admission the risk of readmission is lowest in the Cornwall and Isles of Scilly ICB and Leicester, Leicestershire and Rutland ICB areas, and highest in the Staffordshire and Stoke-on-Trent ICB and Surrey Heartlands ICB areas.
+:::
+
+# Conclusions
+
+Following an emergency admission the risk of both death, and readmission (in those who do not die within the follow-up period), in all 3 cohorts (elderly emergency, falls or frail) was higher for males, those living in more deprived areas and those who were older at admission.
+
+There was also significant variability in risk of death and readmission between ICB area, even once any differences in the age, ethnicity, sex and deprivation of the areas were accounted for in this analysis.
+
+The risk of death in the year post-admission was lower for those who were Asian/Asian British, Black/Black British or Other ethnicities, compared to White British. There is a general trend towards a higher risk of readmission for those who are White British than those of other ethnicities. In the elderly emergency and frail cohorts the risk of readmission was lower in those who were Asian/Asian British, Black/Black British, Other and Unknown ethnicity. For the falls cohort there are less differences between ethnic groups, but in the 1 year post-admission analysis the risk of readmission is also significantly lower in those who are Asian/Asian British, from Other or Unknown ethnic backgrounds.

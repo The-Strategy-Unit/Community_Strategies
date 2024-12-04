@@ -22,3 +22,7 @@ rsconnect/
 #targets meta
 _targets/
 
+#aggregate_data
+split_data/
+aggregate_data_recombined.csv
+

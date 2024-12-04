@@ -128,12 +128,12 @@ mutate(ethnicity=case_when(grepl("^A", ethnic_group) ~ "White British",
   mutate(mortality_1yr=ifelse(time_to_death>365|is.na(time_to_death), 0,1))|>
   mutate(time_to_death_28days=ifelse((time_to_death>28 | is.na(time_to_death)), 30, time_to_death))|>
   mutate(time_to_death_1yr=ifelse((time_to_death>365 | is.na(time_to_death)), 370, time_to_death))|>
-    mutate(remove=ifelse((cohort=="frail" & age_range=="70-74")|(cohort=="elderly emergency" & age_range=="70-74"), 1,0))|>
+    mutate(remove=ifelse((cohort=="frail" & age_range=="60-64")|(cohort=="frail" & age_range=="<60")|(cohort=="elderly emergency" & age_range=="70-74"), 1,0))|>
     filter(remove==0)|>
     select(-remove)|>
   distinct(der_pseudo_nhs_number, admission_date, cohort, .keep_all = TRUE)
 
-save(survival_data, file="Z:/Strategic Analytics/Projects 2024/NHSE Community Strategy/survival_data.RData")
+save(survival_data, file="Z:/Strategic Analytics/Projects 2024/NHSE Community Strategy/survival_analysis.RData")
 
 ```
 
@@ -641,7 +641,7 @@ In the frail cohort the risk of death post-admission:
 
 -   increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) have a higher risk of death than those living in the least deprived areas (IMD decile 10).
 
--   varies by ICB area. The risk of death in the year post-admission is lowest in the North West London ICB and Dorset ICB areas and highest in the Humber and North Yorkshire ICB and Hereford and Worcestershire ICB areas. In the 28 days post-admission the risk of readmission is lowest in the North West London ICB and Hampshire and Isle of Wight ICB areas, and highest in the Hereford and Worcestershire ICB and Cornwall and Isles of Scilly ICB areas.
+-   varies by ICB area. The risk of death in the year post-admission is lowest in the North West London ICB and Dorset ICB areas and highest in the Humber and North Yorkshire ICB and Hereford and Worcestershire ICB areas. In the 28 days post-admission the risk of readmission is lowest in the North West London ICB and Bristol, North Somerset and South Gloucestershire ICB areas, and highest in the Hereford and Worcestershire ICB and Cornwall and Isles of Scilly ICB areas.
 :::
 
 ### Number of deaths on day of admission by ethnicity
@@ -871,7 +871,7 @@ tar_read(icb_table_falls)
 
 The risk of readmission is higher in those who are:
 
--   aged 80-89 years, followed by those aged 75-79 years. Those aged 90+ years had the lowest risk of readmission
+-   aged 75-89 years, with those aged under 75 having the lowest risk of readmission
 
 -   male
 
@@ -1199,7 +1199,7 @@ In the frail cohort the risk of readmission:
 
 -   increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) are more likely to be readmitted than those living in the least deprived areas (IMD decile 10).
 
--   varies by ICB area. The risk of readmission in the year post-admission is lowest in the Cornwall and Isles of Scilly ICB and Gloucestershire ICB areas and highest in the South East London ICB and North West London ICB areas. In the 28 days post-admission the risk of readmission is lowest in the Cornwall and Isles of Scilly ICB and Norfolk and Waveney ICB areas, and highest in the Staffordshire and Stoke-on-Trent ICB and Surrey Heartlands ICB areas.
+-   varies by ICB area. The risk of readmission in the year post-admission is lowest in the Cornwall and Isles of Scilly ICB and Gloucestershire ICB areas and highest in the South East London ICB and North West London ICB areas. In the 28 days post-admission the risk of readmission is lowest in the Cornwall and Isles of Scilly ICB and Leicester, Leicestershire and Rutland ICB areas, and highest in the Staffordshire and Stoke-on-Trent ICB and North East London ICB areas.
 :::
 
 ```{r, eval=FALSE}
@@ -1669,7 +1669,7 @@ In the frail cohort the risk of readmission:
 
 -   increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) are more likely to be readmitted than those living in the least deprived areas (IMD decile 10).
 
--   varies by ICB area. The risk of readmission in the year post-admission is lowest in the and Gloucestershire ICB and Cornwall and Isles of Scilly ICB areas and highest in the Staffordshire and Stoke-on-Trent ICB and Northamptonshire ICB areas. In the 28 days post-admission the risk of readmission is lowest in the Cornwall and Isles of Scilly ICB and Leicester, Leicestershire and Rutland ICB areas, and highest in the Staffordshire and Stoke-on-Trent ICB and Surrey Heartlands ICB areas.
+-   varies by ICB area. The risk of readmission in the year post-admission is lowest in the and Gloucestershire ICB and Cornwall and Isles of Scilly ICB areas and highest in the South East London ICB and Northamptonshire ICB areas. In the 28 days post-admission the risk of readmission is lowest in the Cornwall and Isles of Scilly ICB and Leicester, Leicestershire and Rutland ICB areas, and highest in the Staffordshire and Stoke-on-Trent ICB and North East London ICB areas.
 :::
 
 # Conclusions

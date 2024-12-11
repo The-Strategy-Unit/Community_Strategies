@@ -68,6 +68,10 @@ list(
     deaths_data_2223,
     formatting_survival_data_2223(deaths_data)),
   
+  tar_target(
+    cohort_overlap_data_2324,
+    Formatting_cohort_overlap_data("Z:/Strategic Analytics/Projects 2024/NHSE Community Strategy/cohort_overlap_data.RData") ),
+  
   
   # Plots
   tar_target(

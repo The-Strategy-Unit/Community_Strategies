@@ -1,7 +1,7 @@
 # WP1 - community services strategy
 
 
-# Project specifications
+# Project specifications ----
 
 #    **Package 1: Aggregate population:**
 #      
@@ -264,7 +264,7 @@ aggregate_data_core_cohorts %>%
   
   ggplot(aes(x = month, y = value, colour = name)) +
   #geom_point() +
-  geom_line() +
+  geom_line(linewidth = 1) +
   facet_wrap(~name, scales = "free_y") +
   scale_y_continuous(labels = scales::comma) +
   scale_color_SU() +
@@ -275,26 +275,52 @@ aggregate_data_core_cohorts %>%
        title = "National trend in mitigable acute inpatient admissions",
        subtitle = "SUS Apr 2018 - Aug 2024")
 
+# v2
+aggregate_data_core_cohorts %>%  
+  group_by(month) %>% 
+  summarise(`1. Spells` = sum(spells),
+            `2. Individuals` = sum(person_n),
+            `3. Bed days` = sum(los_sum)) %>% 
+  pivot_longer(cols = -month) %>% 
+  
+  ggplot(aes(x = month, y = value, colour = name)) +
+  #geom_point() +
+  geom_line(linewidth = 1) +
+  facet_wrap(~name, scales = "free_y", nrow = (3)) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_color_SU() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = NA, colour = "grey")) +
+  labs(x = "Month",
+       y = "Spells",
+       title = "National trend in mitigable acute inpatient admissions",
+       subtitle = "SUS Apr 2018 - Aug 2024")
+
+
+
+
 aggregate_data_core_cohorts %>%  
   mutate(year  = lubridate::year(month)) %>% 
   group_by(year) %>% 
-  summarise(Spells = scales::comma(sum(spells)),
-            `Bed days` = scales::comma(sum(los_sum))
+  summarise(`1. Spells` = sum(spells),
+            `2. Individuals` = sum(person_n),
+            `3. Bed days` = sum(los_sum)
             ) %>%
   pivot_longer(cols = -year) %>% 
   pivot_wider(id_cols = year, names_from = name, values_from = value)
   
 
-
 # By cohort
 aggregate_data_frail %>% 
   group_by(month) %>% 
   summarise(frail_spells = sum(spells),
+            frail_ind = sum(person_n),
             frail_bed_days = sum(los_sum)) %>% 
   left_join(
     aggregate_data_eol %>% 
       group_by(month) %>% 
       summarise(eol_short_spells = sum(spells),
+                eol_short_ind = sum(person_n),
                 eol_short_bed_days = sum(los_sum)),
     by = "month"
     ) %>%
@@ -302,6 +328,7 @@ aggregate_data_frail %>%
     aggregate_data_falls %>% 
       group_by(month) %>% 
       summarise(falls_spells = sum(spells),
+                falls_ind = sum(person_n),
                 falls_bed_days = sum(los_sum)),
     by = "month"
   ) %>%
@@ -309,42 +336,43 @@ aggregate_data_frail %>%
     aggregate_data_elderly_emergency %>% 
       group_by(month) %>% 
       summarise(emergency_elderly_spells = sum(spells),
+                emergency_elderly_ind = sum(person_n),
                 emergency_elderly_bed_days = sum(los_sum)),
     by = "month"
   ) %>%
-  left_join(
-    aggregate_data_amb_acute %>% 
-      group_by(month) %>% 
-      summarise(amb_acute_spells = sum(spells),
-                amb_acute_bed_days = sum(los_sum)),
-    by = "month"
-  ) %>%
-  left_join(
-    aggregate_data_amb_chronic %>% 
-      group_by(month) %>% 
-      summarise(amb_chronic_spells = sum(spells),
-                amb_chronic_bed_days = sum(los_sum)),
-    by = "month"
-  ) %>%
-  left_join(
-    aggregate_data_amb_vacc_prev %>% 
-      group_by(month) %>% 
-      summarise(amb_vaccine_spells = sum(spells),
-                amb_vaccine_bed_days = sum(los_sum)),
-    by = "month"
-  ) %>%
-  left_join(
-    aggregate_data_eol_1_year %>% 
-      group_by(month) %>% 
-      summarise(eol_1_year_spells = sum(spells),
-                eol_1_year_bed_days = sum(los_sum)),
-    by = "month"
-  ) %>%
+  #left_join(
+  #  aggregate_data_amb_acute %>% 
+  #    group_by(month) %>% 
+  #    summarise(amb_acute_spells = sum(spells),
+  #              amb_acute_bed_days = sum(los_sum)),
+  #  by = "month"
+  #) %>%
+  #left_join(
+  #  aggregate_data_amb_chronic %>% 
+  #    group_by(month) %>% 
+  #    summarise(amb_chronic_spells = sum(spells),
+  #              amb_chronic_bed_days = sum(los_sum)),
+  #  by = "month"
+  #) %>%
+  #left_join(
+  #  aggregate_data_amb_vacc_prev %>% 
+  #    group_by(month) %>% 
+  #    summarise(amb_vaccine_spells = sum(spells),
+  #              amb_vaccine_bed_days = sum(los_sum)),
+  #  by = "month"
+  #) %>%
+  #left_join(
+  #  aggregate_data_eol_1_year %>% 
+  #    group_by(month) %>% 
+  #    summarise(eol_1_year_spells = sum(spells),
+  #              eol_1_year_bed_days = sum(los_sum)),
+  #  by = "month"
+  #) %>%
   
   pivot_longer(cols = -month) %>% 
   filter(month != as.Date("2024-10-01")) |> 
-  #select(name) |> distinct()
-  mutate(type = case_when(str_detect(name, "bed_days") ~ "2. Bed days",
+  mutate(type = case_when(str_detect(name, "bed_days") ~ "3. Bed days",
+                          str_detect(name, "ind") ~ "2. Individuals",
                           TRUE ~ "1. Spells"),
          Cohort = case_when(str_detect(name, "frail") ~ "1. Frail",
                             str_detect(name, "eol_short") ~ "3. End of life",
@@ -375,11 +403,13 @@ aggregate_data_frail %>%
 aggregate_data_frail %>% 
   group_by(month) %>% 
   summarise(frail_spells = sum(spells),
+            frail_ind = sum(person_n),
             frail_bed_days = sum(los_sum)) %>% 
   left_join(
     aggregate_data_eol %>% 
       group_by(month) %>% 
       summarise(eol_short_spells = sum(spells),
+                eol_short_ind = sum(person_n),
                 eol_short_bed_days = sum(los_sum)),
     by = "month"
   ) %>%
@@ -387,6 +417,7 @@ aggregate_data_frail %>%
     aggregate_data_falls %>% 
       group_by(month) %>% 
       summarise(falls_spells = sum(spells),
+                falls_ind = sum(person_n),
                 falls_bed_days = sum(los_sum)),
     by = "month"
   ) %>%
@@ -394,37 +425,38 @@ aggregate_data_frail %>%
     aggregate_data_elderly_emergency %>% 
       group_by(month) %>% 
       summarise(emergency_elderly_spells = sum(spells),
+                emergency_elderly_ind = sum(person_n),
                 emergency_elderly_bed_days = sum(los_sum)),
     by = "month"
   ) %>%
-  left_join(
-    aggregate_data_amb_acute %>% 
-      group_by(month) %>% 
-      summarise(amb_acute_spells = sum(spells),
-                amb_acute_bed_days = sum(los_sum)),
-    by = "month"
-  ) %>%
-  left_join(
-    aggregate_data_amb_chronic %>% 
-      group_by(month) %>% 
-      summarise(amb_chronic_spells = sum(spells),
-                amb_chronic_bed_days = sum(los_sum)),
-    by = "month"
-  ) %>%
-  left_join(
-    aggregate_data_amb_vacc_prev %>% 
-      group_by(month) %>% 
-      summarise(amb_vaccine_spells = sum(spells),
-                amb_vaccine_bed_days = sum(los_sum)),
-    by = "month"
-  ) %>%
-  left_join(
-    aggregate_data_eol_1_year %>% 
-      group_by(month) %>% 
-      summarise(eol_1_year_spells = sum(spells),
-                eol_1_year_bed_days = sum(los_sum)),
-    by = "month"
-  ) %>%
+  #left_join(
+  #  aggregate_data_amb_acute %>% 
+  #    group_by(month) %>% 
+  #    summarise(amb_acute_spells = sum(spells),
+  #              amb_acute_bed_days = sum(los_sum)),
+  #  by = "month"
+  #) %>%
+  #left_join(
+  #  aggregate_data_amb_chronic %>% 
+  #    group_by(month) %>% 
+  #    summarise(amb_chronic_spells = sum(spells),
+  #              amb_chronic_bed_days = sum(los_sum)),
+  #  by = "month"
+  #) %>%
+  #left_join(
+  #  aggregate_data_amb_vacc_prev %>% 
+  #    group_by(month) %>% 
+  #    summarise(amb_vaccine_spells = sum(spells),
+  #              amb_vaccine_bed_days = sum(los_sum)),
+  #  by = "month"
+  #) %>%
+  #left_join(
+  #  aggregate_data_eol_1_year %>% 
+  #    group_by(month) %>% 
+  #    summarise(eol_1_year_spells = sum(spells),
+  #              eol_1_year_bed_days = sum(los_sum)),
+  #  by = "month"
+  #) %>%
   pivot_longer(cols = -month) %>% 
   mutate(type = case_when(str_detect(name, "bed_days") ~ "2. Bed days",
                           TRUE ~ "1. Spells"),
@@ -455,14 +487,79 @@ aggregate_data_frail %>%
        subtitle = "SUS Apr 2018 - Aug 2024")
 
 
+# Free axis - v2
+aggregate_data_frail %>% 
+  group_by(month) %>% 
+  summarise(frail_spells = sum(spells),
+            frail_ind = sum(person_n),
+            frail_bed_days = sum(los_sum)) %>% 
+  left_join(
+    aggregate_data_eol %>% 
+      group_by(month) %>% 
+      summarise(eol_short_spells = sum(spells),
+                eol_short_ind = sum(person_n),
+                eol_short_bed_days = sum(los_sum)),
+    by = "month"
+  ) %>%
+  left_join(
+    aggregate_data_falls %>% 
+      group_by(month) %>% 
+      summarise(falls_spells = sum(spells),
+                falls_ind = sum(person_n),
+                falls_bed_days = sum(los_sum)),
+    by = "month"
+  ) %>%
+  left_join(
+    aggregate_data_elderly_emergency %>% 
+      group_by(month) %>% 
+      summarise(emergency_elderly_spells = sum(spells),
+                emergency_elderly_ind = sum(person_n),
+                emergency_elderly_bed_days = sum(los_sum)),
+    by = "month"
+  ) %>%
+  pivot_longer(cols = -month) %>% 
+  
+  mutate(type = case_when(str_detect(name, paste(c("spells", "ind"), collapse = "|")) ~ "1. Spells & Individuals",
+                          #str_detect(name, "bed_days") ~ "2. Bed days",
+                          TRUE ~ "2. Bed days"),
+         Cohort = case_when(str_detect(name, "frail") ~ "Frail",
+                            str_detect(name, "eol") ~ "End of life",
+                            str_detect(name, "falls") ~ "Falls",
+                            str_detect(name, "emergency") ~ "Emergency elderly"),
+         label = case_when(str_detect(name, "spells") ~ "1. Spells",
+                           str_detect(name, "ind") ~ "2. Individuals",
+                           str_detect(name, "bed_days") ~ "3. Bed days")
+         ) %>% 
+  #mutate(Cohort = factor(Cohort, levels = "Frail", "Emergency elderly", "End of life", "Falls")) %>% 
+  
+  ggplot(aes(x = month, y = value, colour = label, group = name)) +
+  #geom_point() +
+  geom_line(linewidth = 1) +
+  facet_wrap(Cohort~type, scales = "free", ncol = 2) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_color_SU() +
+  theme(axis.text.x = element_text(angle = 90),
+        strip.background = element_rect(fill = NA, colour = "grey"),
+        #legend.position = "none"
+        ) +
+  labs(x = "Month",
+       y = "Spells",
+       colour = "",
+       title = "National trend in acute inpatient admissions",
+       subtitle = "SUS Apr 2018 - Aug 2024")
+
+
+# Table
 aggregate_data_frail %>% 
   group_by(year) %>% 
   summarise(frail_spells = sum(spells),
+            frail_ind = sum(person_n),
             frail_bed_days = sum(los_sum)) %>% 
   left_join(
     aggregate_data_eol %>% 
       group_by(year) %>% 
       summarise(eol_spells = sum(spells),
+                eol_ind = sum(person_n),
                 eol_bed_days = sum(los_sum)),
     by = "year"
   ) %>%
@@ -470,6 +567,7 @@ aggregate_data_frail %>%
     aggregate_data_falls %>% 
       group_by(year) %>% 
       summarise(falls_spells = sum(spells),
+                falls_ind = sum(person_n),
                 falls_bed_days = sum(los_sum)),
     by = "year"
   ) %>%
@@ -477,6 +575,7 @@ aggregate_data_frail %>%
     aggregate_data_elderly_emergency %>% 
       group_by(year) %>% 
       summarise(emergency_elderly_spells = sum(spells),
+                emergency_elderly_ind = sum(person_n),
                 emergency_elderly_bed_days = sum(los_sum)),
     by = "year"
   ) %>%
@@ -485,12 +584,16 @@ aggregate_data_frail %>%
   pivot_wider(id_cols = year, names_from = name, values_from = value) |> 
   rename(
     `Frail - spells` = frail_spells,
+    `Frail - individuals` = frail_ind,
     `Frail - bed days` = frail_bed_days,
     `EoL - spells` = eol_spells,
+    `EoL - individuals` = eol_ind,
     `Eol - bed days` = eol_bed_days, 
     `Falls - spells` = falls_spells,
+    `Falls - individuals` = falls_ind,
     `Falls - bed days` = falls_bed_days,
     `Emergency elderly - spells` = emergency_elderly_spells,
+    `Emergency elderly - individuals` = emergency_elderly_ind,
     `Emergency elder - bed days` = emergency_elderly_bed_days
   )
 
@@ -592,9 +695,9 @@ aggregate_data |>
   ) |> 
   
   ggplot(aes(x = month, y = prop)) +
-  geom_point() +
+  #geom_point() +
   geom_line() +
-  geom_smooth(method = "loess") +
+  geom_smooth(method = "loess", colour = "#f9bf07") +
   labs(y = "Cohort proportion",
        title = "Cohort spells as a proportion of total spells",
        subtitle = "NHS England admissions denominator | 2018-24")
@@ -884,7 +987,89 @@ adjusted_rate_sub_cohorts %>%
        subtitle = "SUS 2018-24")
 
 
-# Overlap in mitigators
+adjusted_rate_sub_cohorts |> 
+  filter(year == 2023) |> 
+  select(-icb23cd, -year, -id) |> 
+  filter(id_clean != "E. Combined cohort") |> 
+  group_by(id_clean) |> 
+  mutate(quintile = 
+           case_when(adjusted_spell_rate >= quantile(adjusted_spell_rate, 0.8)~ "5",
+                     adjusted_spell_rate <= quantile(adjusted_spell_rate, 0.2)~ "1",
+                     TRUE ~ "2-4")) |>
+  mutate(facet = "") |>
+  mutate(icb_name_clean = str_sub(icb_name_short, 10,100)) |> 
+  mutate(icb_name_clean = str_remove_all(icb_name_clean, " ICB"))|> 
+  mutate(icb_name_clean = fct_reorder(icb_name_clean, adjusted_spell_rate)) |>
+  
+  ggplot(aes(y = icb_name_clean, x = adjusted_spell_rate, fill = quintile)) +
+  geom_col() +
+  facet_grid(facet~id_clean, scales = "free_x") +
+  scale_fill_SU() +
+  theme(strip.background.x = element_rect(fill = NA, colour = "grey")) +
+  labs(x = "Adjusted admission rate",
+       y = "ICB",
+       fill = "Quintile:",
+       title = "Admission rate by ICB and sub-cohort",
+       subtitle = "Age and sex adjusted rate per 1,000 population | SUS admissions 2023")
+
+## Funnel plots ----
+
+# Create function to draw funell plots
+
+funnel_plot_function <- function(cohort, subtitle_text) {
+  
+  data <-
+    adjusted_rate_sub_cohorts |> 
+    filter(id_clean == {{cohort}}, 
+           year == 2023) |> 
+    left_join(icb_pop_2023_sex_age_range |> 
+                group_by(icb_2023_code) |> 
+                summarise(population = sum(population)),
+              by = c("icb23cd" = "icb_2023_code")
+              ) 
+  
+  mean_rate <- mean(data$adjusted_spell_rate)
+  sd_rate <- sd(data$adjusted_spell_rate)
+  
+  # Create the funnel plot
+  data |>
+    mutate(std_from_mean = (adjusted_spell_rate - mean_rate) / sd_rate) |> 
+    mutate(fill_text = 
+             case_when(std_from_mean >= 1 ~ "1. Above 1 SD",
+                       std_from_mean <= -1 ~ "3. Below 1 SD",
+                       TRUE ~ "2. Within 1 SD")) |>
+    mutate(icb_name_clean = str_sub(icb_name_short, 10,100)) |> 
+    mutate(icb_name_clean = str_remove_all(icb_name_clean, " ICB"))|> 
+    mutate(label = case_when(fill_text != "2. Within 1 SD" ~ icb_name_clean)) |> 
+    
+    ggplot(aes(x = population, y = adjusted_spell_rate, 
+               colour = fill_text, 
+               alpha = fill_text
+    )) +
+    geom_point(size = 4) +
+    geom_label_repel(aes(label = label), size = 3, show.legend = FALSE) +
+    geom_hline(yintercept = mean_rate, color = "blue", linetype = "dashed", linewidth = 1) +
+    geom_hline(yintercept = mean_rate + sd_rate, color = "red", linetype = "dotted", linewidth = 1) +
+    geom_hline(yintercept = mean_rate - sd_rate, color = "red", linetype = "dotted", linewidth = 1) +
+    scale_x_continuous(labels = scales::comma) +
+    scale_alpha_manual(values = c(1,0.2,1)) +
+    scale_color_SU() +
+    labs(x = "Population",
+         y = "Adjusted admission rate per 1,000",
+         title = "Variation in admission rates by ICB and underlying population",
+         subtitle = paste0("Subcohort: ", subtitle_text, " | 2023"),
+         colour = "",
+         alpha = ""
+    ) 
+  }
+
+funnel_plot_function("A. Frail", "Frail")
+funnel_plot_function("B. Emergency elderly", "Emergency elderly")
+funnel_plot_function("C. Falls", "Falls")
+funnel_plot_function("D. End of life", "End of life")
+
+
+# Overlap in mitigators ----
 ### Plot 4d geom_point positions for all 4x subcohorts
 
 library(GGally)
@@ -940,9 +1125,6 @@ adjusted_rate_sub_cohorts |>
        title = "Admission rate by ICB and sub-cohort",
        subtitle = "Age and sex adjusted rate per 1,000 population | SUS admissions 2023")
 
-
-
-# Overlap ----
 
 ## Venn diagram
 overlap_data <-

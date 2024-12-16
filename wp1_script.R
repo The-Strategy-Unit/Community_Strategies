@@ -1,7 +1,7 @@
 # WP1 - community services strategy
 
 
-# Project specifications
+# Project specifications ----
 
 #    **Package 1: Aggregate population:**
 #      
@@ -1012,9 +1012,64 @@ adjusted_rate_sub_cohorts |>
        title = "Admission rate by ICB and sub-cohort",
        subtitle = "Age and sex adjusted rate per 1,000 population | SUS admissions 2023")
 
+## Funnel plots ----
+
+# Create function to draw funell plots
+
+funnel_plot_function <- function(cohort, subtitle_text) {
+  
+  data <-
+    adjusted_rate_sub_cohorts |> 
+    filter(id_clean == {{cohort}}, 
+           year == 2023) |> 
+    left_join(icb_pop_2023_sex_age_range |> 
+                group_by(icb_2023_code) |> 
+                summarise(population = sum(population)),
+              by = c("icb23cd" = "icb_2023_code")
+              ) 
+  
+  mean_rate <- mean(data$adjusted_spell_rate)
+  sd_rate <- sd(data$adjusted_spell_rate)
+  
+  # Create the funnel plot
+  data |>
+    mutate(std_from_mean = (adjusted_spell_rate - mean_rate) / sd_rate) |> 
+    mutate(fill_text = 
+             case_when(std_from_mean >= 1 ~ "1. Above 1 SD",
+                       std_from_mean <= -1 ~ "3. Below 1 SD",
+                       TRUE ~ "2. Within 1 SD")) |>
+    mutate(icb_name_clean = str_sub(icb_name_short, 10,100)) |> 
+    mutate(icb_name_clean = str_remove_all(icb_name_clean, " ICB"))|> 
+    mutate(label = case_when(fill_text != "2. Within 1 SD" ~ icb_name_clean)) |> 
+    
+    ggplot(aes(x = population, y = adjusted_spell_rate, 
+               colour = fill_text, 
+               alpha = fill_text
+    )) +
+    geom_point(size = 4) +
+    geom_label_repel(aes(label = label), size = 3, show.legend = FALSE) +
+    geom_hline(yintercept = mean_rate, color = "blue", linetype = "dashed", linewidth = 1) +
+    geom_hline(yintercept = mean_rate + sd_rate, color = "red", linetype = "dotted", linewidth = 1) +
+    geom_hline(yintercept = mean_rate - sd_rate, color = "red", linetype = "dotted", linewidth = 1) +
+    scale_x_continuous(labels = scales::comma) +
+    scale_alpha_manual(values = c(1,0.2,1)) +
+    scale_color_SU() +
+    labs(x = "Population",
+         y = "Adjusted admission rate per 1,000",
+         title = "Variation in admission rates by ICB and underlying population",
+         subtitle = paste0("Subcohort: ", subtitle_text, " | 2023"),
+         colour = "",
+         alpha = ""
+    ) 
+  }
+
+funnel_plot_function("A. Frail", "Frail")
+funnel_plot_function("B. Emergency elderly", "Emergency elderly")
+funnel_plot_function("C. Falls", "Falls")
+funnel_plot_function("D. End of life", "End of life")
 
 
-# Overlap in mitigators
+# Overlap in mitigators ----
 ### Plot 4d geom_point positions for all 4x subcohorts
 
 library(GGally)
@@ -1070,9 +1125,6 @@ adjusted_rate_sub_cohorts |>
        title = "Admission rate by ICB and sub-cohort",
        subtitle = "Age and sex adjusted rate per 1,000 population | SUS admissions 2023")
 
-
-
-# Overlap ----
 
 ## Venn diagram
 overlap_data <-

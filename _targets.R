@@ -6,7 +6,7 @@ library(targets)
 tar_option_set(
   packages = c("dplyr",  "flextable", "lubridate", "tidyr", "stringr", "ggplot2", "StrategyUnitTheme", 
                "survival", "ggfortify", "survminer", "ggsurvfit", "RColorBrewer", "forcats", "plotly", "finalfit", 
-               "cowplot", "eha") 
+               "cowplot", "eha", "ComplexUpset") 
 )
 
 #library(janitor)
@@ -70,8 +70,16 @@ list(
   
   tar_target(
     cohort_overlap_data_2324,
-    Formatting_cohort_overlap_data("Z:/Strategic Analytics/Projects 2024/NHSE Community Strategy/cohort_overlap_data.RData") ),
+    Formatting_cohort_overlap_data("Z:/Strategic Analytics/Projects 2024/NHSE Community Strategy/cohort_overlap_data_patients.RData") ),
   
+  tar_target(
+    spells_beddays_data,
+    Formatting_spells_beddays_data("Z:/Strategic Analytics/Projects 2024/NHSE Community Strategy/cohort_overlap_data_spells_beddays.RData")  ),
+  
+  # Matrix of overlap
+  tar_target(
+    table_of_overlap,
+    table_of_overlap_values(cohort_overlap_data_2324)),
   
   # Plots
   tar_target(

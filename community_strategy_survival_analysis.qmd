@@ -147,7 +147,7 @@ Three patient cohorts are included within this analysis:
 
 -   **Elderly emergency**: those 75 or over with an emergency admission.
 
--   **Frail**: those 75 or over with an emergency admission and a frailty score over 5. The frailty score is calculated from ICD-10 diagnoses recorded for admissions during the previous 2 years and using the risk scores in *Gilbert et al (2018), Development and validation of a Hospital Frailty Risk Score focusing on older people in acute care settings using electronic hospital records: an observational study. The Lancet, 391(10132), pp.1775-1782.* (Note these patients are a subset for those in the elderly emergency cohort)
+-   **Frail**: those 65 or over with an emergency admission and a frailty score over 5. The frailty score is calculated from ICD-10 diagnoses recorded for admissions during the previous 2 years and using the risk scores in *Gilbert et al (2018), Development and validation of a Hospital Frailty Risk Score focusing on older people in acute care settings using electronic hospital records: an observational study. The Lancet, 391(10132), pp.1775-1782.* (Note these patients are a subset for those in the elderly emergency cohort)
 
 -   **Falls**: those 65 or over with an emergency admission related to a fall.
 
@@ -1028,7 +1028,7 @@ In the elderly emergency cohort the risk of readmission:
 
 -   is higher in those who are White British, and significantly lower in those who are Asian/Asian British, Black/Black British, Other or Unknown ethnicity. Up to 28 days those of mixed ethnicity have a similar risk of readmission to White British, but in the analysis, but the risk drops below that of White British in the analysis to 1 year.
 
--   increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) are more likely to be readmitted than those living in the least deprived areas (IMD decile 10). 
+-   increases with increasing deprivation, those living in the most deprived areas (IMD decile 1) are more likely to be readmitted than those living in the least deprived areas (IMD decile 10).
 
 -   varies by ICB area. The risk of readmission is lowest in the Cornwall and Isles of Scilly ICB area. In the year post-admission the risk of readmission is highest in South East London ICB and North West London ICB areas. While up to 28 days post-admission the risk is highest in the North East London ICB area.
 :::

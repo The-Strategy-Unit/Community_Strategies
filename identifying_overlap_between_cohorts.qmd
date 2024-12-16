@@ -47,17 +47,18 @@ library(gridExtra)
 library(ComplexUpset)
 library(ggVennDiagram)
 library(scales)
+library(DT)
 
 options(scipen = 999)
 source("r/Functions for cohort overlap.R")
 
 cohort_overlap_data_2324<-tar_read(cohort_overlap_data_2324)
+spells_beddays_data<-tar_read(spells_beddays_data)
 
 ```
 
 ```{r, eval=FALSE}
 # Formatting data
-
 con <- dbConnect(odbc(), 
                  Driver = "SQL Server", 
                  server = "PRODNHSESQL101", 
@@ -73,6 +74,7 @@ FROM [NHSE_Sandbox_StrategyUnit].[dbo].[nhse_comm_strat_cohort_overlap]
   as.data.frame()
 
 
+
 cohort_overlap_data<-raw_cohort_overlap_data|>
   filter(!is.na(der_pseudo_nhs_number))|>
   mutate(falls=ifelse(!is.na(flag_falls_exp)|!is.na(flag_fall_imp_frac)|!is.na(flag_fall_imp_tend), "falls", NA))|> # Single flag for falls
@@ -84,17 +86,6 @@ cohort_overlap_data<-raw_cohort_overlap_data|>
    mutate(amb_acute=ifelse(!is.na(amb_acute),1,0))|>
    mutate(amb_vacc_prev=ifelse(!is.na(amb_vacc_prev),1,0))|>
   mutate(expanded_eol=ifelse(!is.na(death_location_type),1,0))|>
-  group_by(der_pseudo_nhs_number, der_financial_year)|>
-reframe(falls=max(falls),
-        eol=max(eol),
-        elderly_emergency=max(elderly_emergency),
-        frail=max(frail),
-        amb_chronic=max(amb_chronic),
-        amb_acute=max(amb_acute),
-        amb_vacc_prev=max(amb_vacc_prev),
-        expanded_eol=max(expanded_eol),
-        age_range, sex, ethnic_group, imd_decile, icb_name_short)|>
-  distinct(der_pseudo_nhs_number, der_financial_year, .keep_all = TRUE)cohort_overlap_data<-raw_cohort_overlap_data|>
     rename(icb=icb_name_short)|>
   mutate(imd_decile=as.character(imd_decile))|>
   mutate(imd_decile=fct_relevel(imd_decile,c("1","2","3", "4","5","6","7","8","9", "10")))|>
@@ -118,12 +109,39 @@ mutate(ethnicity=case_when(grepl("^A", ethnic_group) ~ "White British",
   mutate(ethnicity=fct_relevel(ethnicity, c("Asian/Asian British", "Black/Black British", "Mixed", "Other", "White British", "White Other", "Unknown")))|>
     mutate(elderly_emergency=ifelse((elderly_emergency==1 & age_range=="70-74"), 0,elderly_emergency))|>
     mutate(frail=ifelse((frail==1 & (age_range=="60-64"|age_range=="<60")), 0,frail))|>
+  select(-ethnic_group)|>
+  as.data.frame()
+
+# Disconnect! # 
+dbDisconnect(con)
+
+
+
+cohort_overlap_data_spells_beddays<-cohort_overlap_data|>
+distinct(der_pseudo_nhs_number, der_financial_year, apcs_ident, .keep_all = TRUE)|>
+mutate(cohort=paste0(falls, frail, elderly_emergency, eol, expanded_eol, amb_chronic, amb_acute, amb_vacc_prev))|>
+  group_by(der_financial_year, apcs_ident, age_range, sex, ethnicity, imd_decile, falls, frail, elderly_emergency, eol, expanded_eol, amb_chronic, amb_acute, amb_vacc_prev, cohort)|>
+  summarise(spells=n(), beddays=sum(der_spell_lo_s))
+
+cohort_overlap_data_patients<-cohort_overlap_data|>
+  group_by(der_pseudo_nhs_number, der_financial_year)|>
+reframe(Falls=max(falls),
+        EOL=max(eol),
+        `Elderly Emergency`=max(elderly_emergency),
+        Frail=max(frail),
+        `ACSC Chronic`=max(amb_chronic),
+        `ACSC Acute`=max(amb_acute),
+        `ACSC Vaccine Preventable`=max(amb_vacc_prev),
+        `Expanded EOL`=max(expanded_eol),
+        age_range, sex, ethnicity, imd_decile)|>
   distinct(der_pseudo_nhs_number, der_financial_year, .keep_all = TRUE)|>
-  select(-ethnic_group)
- 
-
-save(cohort_overlap_data, file="Z:/Strategic Analytics/Projects 2024/NHSE Community Strategy/cohort_overlap_data.RData")
-
+  mutate(cohort=paste0(Falls, Frail, `Elderly Emergency`, EOL, `Expanded EOL`, `ACSC Chronic`,`ACSC Acute`, `ACSC Vaccine Preventable`))|>
+  group_by(der_financial_year, age_range, sex, ethnicity, imd_decile, cohort, Falls, Frail, `Elderly Emergency`, EOL, `Expanded EOL`, `ACSC Chronic`,`ACSC Acute`, `ACSC Vaccine Preventable`)|>
+   summarise(patients=n())|>
+   mutate(`ACSC All`=ifelse(`ACSC Chronic`==1|`ACSC Acute`==1| `ACSC Vaccine Preventable`==1, 1,0))
+  
+save(cohort_overlap_data_patients, file="cohort_overlap_data_patients.RData")
+save(cohort_overlap_data_spells_beddays, file="cohort_overlap_data_spells_beddays.RData")
 ```
 
 ## Aims
@@ -150,7 +168,8 @@ The patient cohorts included within this analysis are:
 -   **Acute**: admissions for dehydration and gastroenteritis, pyelonephritis, perforated/bleeding ulcer, cellulitis, pelvic inflammatory disease, dental conditions, convulsions/epilepsy, gangrene and ear, nose and throat infections
 -   **Vaccine Preventable**: admissions for influenza, pneumonia and other vaccine-preventable conditions
 
-Overlap of the patients between cohorts is determined. The Venn diagrams are coloured so that the largest groups/overlap is shown in red and the smallest groups/overlap is shown in blue. The Upset plots show only the largest groups/overlaps.
+Overlap of the patients between cohorts is determined. The Venn diagrams are coloured so that the largest groups/overlap is shown in red and the smallest groups/overlap is shown in blue. The Upset plots show only the largest groups/overlaps. Values and percentages on the Venn diagrams will be slightly different to those on the Upset plots as the Venn diagrams only contain a maximum of 5 groups, whereas the Upset plots contain all groups. All data shown is for 2023/24.
+
 
 
 ## Size of cohorts 
@@ -178,6 +197,25 @@ gather(key=Cohort, value=`Number of people`)|>
   scale_y_continuous(expand=c(0,0))+
     scale_x_discrete(labels = label_wrap(width = 10))
 
+
+
+```
+
+## Table of numbers of patients in each cohort/overlap
+
+```{r}
+
+table_of_overlap<-tar_read(table_of_overlap)
+
+table_of_overlap<-table_of_overlap|>
+  left_join(spells_beddays_data[,c("Spells", "Beddays", "binary_cohort", "sex", "age_groups")], by=c("binary_cohort", "sex", "age_groups"))%>%
+  replace(is.na(.), 0)|>
+  rename(Intersection=intersection)|>
+  select(Intersection, age_groups, sex, `Number of patients`, Spells, Beddays,`Elderly Emergency`, Frail, Falls,`Expanded EOL`, EOL, `ACSC Chronic`, `ACSC Acute`, `ACSC Vaccine Preventable` )
+  
+
+
+create_dt(table_of_overlap)
 ```
 
 
@@ -312,6 +350,12 @@ Of those in the elderly emergency cohort, 27% are solely in this cohort. The eld
 ```{r, fig.width=10, fig.height=6}
 
 plot_upset_plot(cohort_overlap_data_2324|>filter(`Elderly Emergency`==1), 15 , 330000)
+
+```
+
+```{r, fig.width=8, fig.height=4}
+
+plotting_barchart_summary_of_overlaps(cohort_overlap_data_2324, `Elderly Emergency`, "Number (%) of Elderly Emergency cohort that are included within other cohorts") 
 ```
 
 ```{r, eval=FALSE}
@@ -350,6 +394,13 @@ Of those in the frail cohort, 17% are solely in this cohort, there is considerab
 ```{r, fig.width=10, fig.height=6}
 
 plot_upset_plot(cohort_overlap_data_2324|>filter(Frail==1),15, 330000)
+
+```
+
+
+```{r, fig.width=8, fig.height=4}
+
+plotting_barchart_summary_of_overlaps(cohort_overlap_data_2324, Frail, "Number (%) of Frail cohort that are included within other cohorts") 
 ```
 
 #### Falls
@@ -359,6 +410,12 @@ Only 2.9% of those in the falls cohort are solely in this cohort. Those in the f
 ```{r, fig.width=10, fig.height=6}
 
 plot_upset_plot(cohort_overlap_data_2324|>filter(Falls==1),15, 90000)
+
+```
+
+```{r, fig.width=8, fig.height=4}
+
+plotting_barchart_summary_of_overlaps(cohort_overlap_data_2324, Falls, "Number (%) of Falls cohort that are included within other cohorts") 
 ```
 
 #### EOL
@@ -368,6 +425,12 @@ Only 1.3% of those in the EOL cohort are solely in this cohort. Given it is a su
 ```{r, fig.width=10, fig.height=6}
 
 plot_upset_plot(cohort_overlap_data_2324|>filter(EOL==1),15, 18000)
+
+```
+
+```{r, fig.width=8, fig.height=4}
+
+plotting_barchart_summary_of_overlaps(cohort_overlap_data_2324, EOL, "Number (%) of End of Life cohort that are included within other cohorts") 
 ```
 
 #### Expanded EOL
@@ -378,6 +441,12 @@ Of those in the expanded EOL cohort, 25% are solely in this cohort. There is con
 ```{r, fig.width=10, fig.height=6}
 
 plot_upset_plot(cohort_overlap_data_2324|>filter(`Expanded EOL`==1),15, 150000)
+
+```
+
+```{r, fig.width=8, fig.height=4}
+
+plotting_barchart_summary_of_overlaps(cohort_overlap_data_2324, `Expanded EOL`, "Number (%) of Expanded End of Life cohort that are included within other cohorts") 
 ```
 
 #### ACSC
@@ -387,7 +456,15 @@ Of those in the ambulatory sensitive care cohorts, 28.5% are solely in the acute
 ```{r, fig.width=10, fig.height=6}
 
 plot_upset_plot(cohort_overlap_data_2324|>filter(`ACSC All`==1),15, 210000)
+
 ```
+
+```{r, fig.width=8, fig.height=4}
+
+plotting_barchart_summary_of_overlaps(cohort_overlap_data_2324, `ACSC All`, "Number (%) of Ambulatory Care Sensitive Conditions cohort that are included within other cohorts") 
+
+```
+
 :::
 
 ## Differences in cohort overlap by age
@@ -645,7 +722,7 @@ plot_upset_plot(cohort_overlap_data_2324|>filter(imd_decile=="9"|imd_decile=="10
 
 ## Differences in cohort overlap by ethnicity
 
-The most common cohort for those who are White British was the elderly emergency cohort, followed by those in both the elderly emergency and frail cohorts. For all other ethnicities the most common cohort was the acute ambulatory care sensitive conditions cohort. The second most common cohort in all those who were not white was the chronic ambulatory care sensitive conditions cohort.
+Those who are White British were most commonly in the elderly emergency cohort, and in both the elderly emergency and frail cohorts. Those of all other ethnicities were most commonly in the acute ambulatory care sensitive conditions cohort. The second most common cohort in all those who were not white was the chronic ambulatory care sensitive conditions cohort.
 
 :::panel-tabset
 

@@ -1,5 +1,17 @@
 # WP1 - community services strategy
 
+library(tidyverse)
+library(janitor)
+library(DT)
+library(sf)
+library(readxl)
+library(patchwork)
+library(GGally)
+library(ggVennDiagram)
+library(ggvenn)
+library(plotly)
+library(reshape2)
+library(ggrepel)
 
 # Project specifications ----
 
@@ -1015,7 +1027,6 @@ adjusted_rate_sub_cohorts |>
 ## Funnel plots ----
 
 # Create function to draw funell plots
-
 funnel_plot_function <- function(cohort, subtitle_text) {
   
   data <-
@@ -1067,6 +1078,108 @@ funnel_plot_function("A. Frail", "Frail")
 funnel_plot_function("B. Emergency elderly", "Emergency elderly")
 funnel_plot_function("C. Falls", "Falls")
 funnel_plot_function("D. End of life", "End of life")
+
+
+# 2x2 plots to compare admission rates in 2 cohorts on 1 graph
+
+compare_2_2_plots <- function(cohort_1, cohort_2, cohort_1_axis, cohort_2_axis) {
+  
+  data_cohort_1 <-
+    adjusted_rate_sub_cohorts |> 
+    filter(id_clean == {{cohort_1}}, 
+           year == 2023) 
+  
+  mean_rate_cohort_1 <- mean(data_cohort_1$adjusted_spell_rate)
+  sd_rate_cohort_1 <- sd(data_cohort_1$adjusted_spell_rate)
+  
+  data_cohort_2 <-
+    adjusted_rate_sub_cohorts |> 
+    filter(id_clean == {{cohort_2}}, 
+           year == 2023) 
+  
+  mean_rate_cohort_2 <- mean(data_cohort_2$adjusted_spell_rate)
+  sd_rate_cohort_2 <- sd(data_cohort_2$adjusted_spell_rate)
+  
+  # Plot
+  plot <-
+    data_cohort_1 |> 
+    mutate(std_from_mean_cohort_1 = (adjusted_spell_rate - mean_rate_cohort_1) / sd_rate_cohort_1) |> 
+    select(1:2, adjusted_spell_rate, std_from_mean_cohort_1) |> 
+    rename(cohort_1_adj_rate = adjusted_spell_rate) |> 
+    left_join(data_cohort_2 |> 
+                mutate(std_from_mean_cohort_2 = (adjusted_spell_rate - mean_rate_cohort_2) / sd_rate_cohort_2) |> 
+                select(1:2, adjusted_spell_rate, std_from_mean_cohort_2) |> 
+                rename(cohort_2_adj_rate = adjusted_spell_rate),
+              by = c("icb23cd", "icb_name_short")) |> 
+    rename(ICB = icb_name_short) |> 
+    
+    mutate(fill_text = 
+             case_when(
+               (std_from_mean_cohort_1 <= 1 & std_from_mean_cohort_1 >= -1) &
+                 (std_from_mean_cohort_2 <= 1 & std_from_mean_cohort_2 >= -1) ~ "A. Within 1 SD",
+               (std_from_mean_cohort_1 > 1 & std_from_mean_cohort_2 > 1) ~ "B. Above 1 SD",
+               (std_from_mean_cohort_1 < -1 & std_from_mean_cohort_2 < -1) ~ "C. Below 1 SD",
+               TRUE ~ "D. +/- 1 SD on one axis"
+             )) |> 
+    
+    ggplot(aes(x = cohort_1_adj_rate, y = cohort_2_adj_rate, 
+               colour = fill_text, alpha = fill_text, 
+               label =  ICB
+               )) +
+    geom_point(size = 3) +
+    
+    # Cohort 1 lines
+    geom_vline(xintercept = mean_rate_cohort_1, color = "blue", linetype = "dashed", linewidth = 0.3) +
+    geom_vline(xintercept = mean_rate_cohort_1 + sd_rate_cohort_1, color = "red", linetype = "dotted", linewidth = 0.25) +
+    geom_vline(xintercept = mean_rate_cohort_1 - sd_rate_cohort_1, color = "red", linetype = "dotted", linewidth = 0.25) +
+    
+    # Cohort 2 line
+    geom_hline(yintercept = mean_rate_cohort_2, color = "blue", linetype = "dashed", linewidth = 0.3) +
+    geom_hline(yintercept = mean_rate_cohort_2 + sd_rate_cohort_2, color = "red", linetype = "dotted", linewidth = 0.25) +
+    geom_hline(yintercept = mean_rate_cohort_2 - sd_rate_cohort_2, color = "red", linetype = "dotted", linewidth = 0.25) +
+    
+    scale_x_continuous(labels = scales::comma) +
+    scale_alpha_manual(values = c(0.3, 1, 1, 1)) + # Only shade out those within 1 SD on both axis
+    scale_color_SU() +
+    theme_SU() +
+    labs(x = paste0("Admission rate: ", cohort_1_axis),
+         y = paste0("Admission rate: ", cohort_2_axis),
+         colour = "",
+         alpha = ""
+         )
+  
+  #plot
+  
+  ggplotly(plot, tooltip = "label") |>
+    layout(
+      title = list(
+        text = "<b>Variation in admission rates by ICB</b><br>",
+        x = 0.05,  # Center the title
+        y = 0.95,
+        xanchor = "left",
+        font = list(size = 14)  # Title font size
+      ),
+      annotations = list(
+        list(
+          text = "<i>Comparison of adjusted admission rates by sub-cohort</i>",
+          x = 0,  # Center the title
+          y = 0.98,
+          xanchor = "left",
+          xref = "paper",
+          yref = "paper",
+          showarrow = FALSE,
+          font = list(size = 12)  # Subtitle font size
+          )
+        )
+      )
+}
+
+compare_2_2_plots("A. Frail", "B. Emergency elderly", "Frail", "Emergency elderly")
+compare_2_2_plots("A. Frail", "C. Falls", "Frail", "Falls")
+compare_2_2_plots("A. Frail", "D. End of life", "Frail", "End of life")
+compare_2_2_plots("B. Emergency elderly", "C. Falls", "Emergency elderly", "Falls")
+compare_2_2_plots("B. Emergency elderly", "D. End of life", "Emergency elderly", "End of life")
+compare_2_2_plots("C. Falls", "D. End of life", "Falls", "End of life")
 
 
 # Overlap in mitigators ----
@@ -1458,4 +1571,59 @@ patchwork_function(aggregate_data_elderly_emergency, "Emergency elderly patients
 patchwork_function(aggregate_data_frail, "Frail patients")
 patchwork_function(aggregate_data_falls, "Falls patients")
 patchwork_function(aggregate_data_eol, "End-of-life patients")
+
+
+# Top diagnoses by cohort
+
+read_diagnosis_list <- function(cohort) {
+
+  data <- 
+    read_csv(paste0("top_diagnoses/", cohort, ".csv")) |> 
+    clean_names() |> 
+    select(4,2) |> 
+    rename(Admissions = 2) |> 
+    arrange(desc(Admissions)) |> 
+    mutate(Proportion = round(Admissions/sum(Admissions)*100, 2)) |> 
+    rename(`Primary diagnosis` = icd10_l4_desc) |> 
+    head(10) |> 
+    mutate(Admissions = scales::comma(Admissions))
+  
+  data
+}
+
+read_diagnosis_list("frail") 
+read_diagnosis_list("emergency_elderly")
+read_diagnosis_list("falls")
+read_diagnosis_list("eol")
+read_diagnosis_list("amb_chronic")
+read_diagnosis_list("amb_acute")
+read_diagnosis_list("amb_vacc_prev")
+read_diagnosis_list("eol_broad")
+
+
+# Top diagnoses by cohort
+
+read_procedures_list <- function(cohort) {
+  
+  data <- 
+    read_csv(paste0("top_procedures/", cohort, ".csv")) |> 
+    clean_names() |> 
+    select(4,2) |> 
+    rename(Admissions = 2) |> 
+    arrange(desc(Admissions)) |> 
+    mutate(Proportion = round(Admissions/sum(Admissions)*100, 2)) |> 
+    rename(`Primary procedure` = opcs_l4_desc) |> 
+    head(10)
+  
+  data
+}
+
+read_procedures_list("frail")
+read_procedures_list("emergency_elderly")
+read_procedures_list("falls")
+read_procedures_list("eol")
+read_procedures_list("amb_chronic")
+read_procedures_list("amb_acute")
+read_procedures_list("amb_vacc_prev")
+read_procedures_list("eol_broad")
 

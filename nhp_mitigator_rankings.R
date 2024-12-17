@@ -42,8 +42,8 @@ inpatient_strat <-
 episodes_beddays_per_strategy <-
   inpatient_strat |> 
   group_by(strategy) |> 
-  summarise(episodes = n_distinct(EPIKEY),
-            bed_days = sum(SPELDUR)) |> 
+  summarise(episodes = sum(sample_rate),
+            bed_days = sum(SPELDUR * sample_rate)) |> 
   ungroup() |> 
   mutate(episode_prop = episodes/sum(episodes)*100) |> 
   select(strategy, episodes, episode_prop, bed_days) |> 

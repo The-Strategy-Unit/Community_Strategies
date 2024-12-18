@@ -46,6 +46,7 @@ data|>
   
 }
 
+
 # Distribution of number of readmissions
 
 plot_numbers_of_readmissions<-function(data){

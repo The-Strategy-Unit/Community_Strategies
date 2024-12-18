@@ -48,15 +48,16 @@ library(plotly)
 library(cowplot)
 library(eha)
 library(gridExtra)
+library(furniture)
 
 source("R/Plots.R")
 source("R/Tables.R")
 
 # Load data (saved files to save time on rerunning the initial formatting)
-#survival_data<-tar_read(survival_data)
-#survival_data_2223<-tar_read(survival_data_2223)
+survival_data<-tar_read(survival_data)
+survival_data_2223<-tar_read(survival_data_2223)
 survival_data_first_readmission_2223<-tar_read(survival_data_first_readmission_2223)
-#deaths_data<-tar_read(deaths_data)
+deaths_data_2223<-tar_read(deaths_data_2223)
 
 #survival_data_2223_survived_1yr<-tar_read(survival_data_2223_survived_1yr)
 
@@ -163,6 +164,8 @@ Survival analysis has been conducted using data from 2023/23 for
 
 Note: Frimley ICB has been removed from the analysis due to missing data.
 
+
+
 # Mortality
 
 The time from when a patient first had an emergency admission and first entered the cohort until death was calculated. Those who died on the same day as their emergency admission when they first entered the cohort were excluded.
@@ -184,6 +187,74 @@ grid.arrange(p1, p2, ncol=2)
 The proportion of patients who die is higher within the elderly emergency and frail cohorts compared to the falls cohort.
 
 Generally the proportion of deaths within either 28 days or 1 year have remained stable over time. A slightly lower percentage of deaths within 1 year is to be expected for those first admitted in 2023/24 as there is not a full year of follow-up and some deaths will have not yet occurred.
+
+## Summary of percentage of patients dying within 1 year (2022/23)
+
+```{r, fig.height=8, fig.width=8}
+ 
+ mortality<-furniture::table1(deaths_data_2223|>
+   filter(cohort=="falls")|>mutate(cohort="Total"), 
+   sex, age_range, ethnicity, imd_decile, cohort,
+         splitby= ~factor(mortality_1yr)*cohort, 
+         row_wise=TRUE,
+       format_number = TRUE)|>
+   as.data.frame()|>
+     select(-`0`)|>  
+     filter(.!="")|>
+   rename(`Falls`=`1`)|>
+   full_join(furniture::table1(deaths_data_2223|>
+   filter(cohort=="frail")|>mutate(cohort="Total"), 
+   sex, age_range, ethnicity, imd_decile, cohort,
+         splitby= ~factor(mortality_1yr)*cohort, 
+         row_wise=TRUE,
+       format_number = TRUE)|>
+   as.data.frame()|>
+     select(-`0`)|>  
+        filter(.!="")|>
+   rename(`Frail`=`1`))|>
+   full_join(furniture::table1(deaths_data_2223|>
+     filter(cohort=="elderly emergency")|>mutate(cohort="Total"), 
+   sex, age_range, ethnicity, imd_decile,cohort,
+         splitby= ~factor(mortality_1yr)*cohort, 
+         row_wise=TRUE,
+       format_number = TRUE)|>
+   as.data.frame()|>
+   select(-`0`)|>
+        filter(.!="")|>
+   rename(`Elderly Emergency`=`1`))%>%
+   replace(is.na(.), "N/A")|>
+   select(., `Elderly Emergency`, Frail, Falls)|>
+  rename(variable=.)|>
+    mutate(variable = str_replace_all(variable, "sex", "Sex"))|>
+    mutate(variable= str_replace_all(variable, "age_range", "Age"))|>
+      mutate(variable = str_replace_all(variable, "ethnicity", "Ethnicity"))|>
+    mutate(variable= str_replace_all(variable, "imd_decile", "IMD decile"))|>
+  mutate(variable=ifelse(variable=="cohort", "", variable))
+ 
+  mortality|>
+    flextable()|>
+    set_header_labels(variable="")|>
+    bg(bg = "#f9bf07", part = "header") |>
+    align(part = "body", align = "right")|>
+    align(j=1, part = "body", align = "left")|>
+      align(part = "header", align = "right")|>
+    fontsize(size = 11, part = "all")|>
+    padding(padding = 2, part = "all", padding.top=NULL) |>
+    bold(bold = TRUE, part="header")|>
+    bold(i=1, bold = TRUE, part="body")|>
+    bold(i=4, bold = TRUE, part="body")|>
+    bold(i=12, bold = TRUE, part="body")|>
+    bold(i=20, bold = TRUE, part="body")|>
+    bold(i=32, bold = TRUE, part="body")|>
+    line_spacing(space = 1.2, part = "body")|>
+    autofit()|>
+    htmltools_value(ft.align = "left")     
+
+
+
+
+```
+
 
 ## Comparing time to death between the cohorts using Kaplan-meier plot (2022/23)
 
@@ -708,6 +779,75 @@ The proportion of patient with a readmission is higher in the elderly emergency 
 
 A lower percentage of readmissions within 1 year is to be expected for those admitted in 2023/24 as there is not a full year of follow-up and some readmissions will have not yet occurred.
 
+## Summary of percentage of patients readmitted within 1 year (2022/23)
+All admissions are counted an individual events, so some patients with multiple admissions will be included more than once.
+
+```{r, fig.height=8, fig.width=8}
+
+ readmit<-furniture::table1(survival_data_2223|>
+   filter(cohort=="falls")|>mutate(cohort="Total"), 
+   sex, age_range, ethnicity, imd_decile, cohort,
+         splitby= ~factor(mortality_1yr)*cohort, 
+         row_wise=TRUE,
+       format_number = TRUE)|>
+   as.data.frame()|>
+     select(-`0`)|>  
+     filter(.!="")|>
+   rename(`Falls`=`1`)|>
+   full_join(furniture::table1(survival_data_2223|>
+   filter(cohort=="frail")|>mutate(cohort="Total"), 
+   sex, age_range, ethnicity, imd_decile, cohort,
+         splitby= ~factor(mortality_1yr)*cohort, 
+         row_wise=TRUE,
+       format_number = TRUE)|>
+   as.data.frame()|>
+     select(-`0`)|>  
+        filter(.!="")|>
+   rename(`Frail`=`1`))|>
+   full_join(furniture::table1(survival_data_2223|>
+     filter(cohort=="elderly emergency")|>mutate(cohort="Total"), 
+   sex, age_range, ethnicity, imd_decile,cohort,
+         splitby= ~factor(mortality_1yr)*cohort, 
+         row_wise=TRUE,
+       format_number = TRUE)|>
+   as.data.frame()|>
+   select(-`0`)|>
+        filter(.!="")|>
+   rename(`Elderly Emergency`=`1`))%>%
+   replace(is.na(.), "N/A")|>
+   select(., `Elderly Emergency`, Frail, Falls)|>
+  rename(variable=.)|>
+    mutate(variable = str_replace_all(variable, "sex", "Sex"))|>
+    mutate(variable= str_replace_all(variable, "age_range", "Age"))|>
+      mutate(variable = str_replace_all(variable, "ethnicity", "Ethnicity"))|>
+    mutate(variable= str_replace_all(variable, "imd_decile", "IMD decile"))|>
+  mutate(variable=ifelse(variable=="cohort", "", variable))
+ 
+  readmit|>
+    flextable()|>
+    set_header_labels(variable="")|>
+    bg(bg = "#f9bf07", part = "header") |>
+    align(part = "body", align = "right")|>
+    align(j=1, part = "body", align = "left")|>
+      align(part = "header", align = "right")|>
+    fontsize(size = 11, part = "all")|>
+    padding(padding = 2, part = "all", padding.top=NULL) |>
+    bold(bold = TRUE, part="header")|>
+    bold(i=1, bold = TRUE, part="body")|>
+    bold(i=4, bold = TRUE, part="body")|>
+    bold(i=12, bold = TRUE, part="body")|>
+    bold(i=20, bold = TRUE, part="body")|>
+    bold(i=32, bold = TRUE, part="body")|>
+    line_spacing(space = 1.2, part = "body")|>
+    autofit()|>
+    htmltools_value(ft.align = "left")   
+
+ 
+ 
+ 
+
+```
+
 ## Number of readmissions in 2022/2023
 
 ```{r mean and median}
@@ -1223,6 +1363,88 @@ fit_aft_elderly_emergency_28days <- aftreg(Surv(time_to_readmit_28days, readmit_
 # Readmissions- excluding those who died prior to readmission
 
 In the previous analysis of readmissions we see that some of the ICB areas with the lowest readmission rates are those with higher mortality rates. Given that the risk of readmission will be strongly influenced by the mortality rate for this analysis we have excluded all those that died prior to readmission at either 28 days or 1 year. This gives us the risk of readmission for those that survived to the end of the time period of interest, either 28 days or 1 year.
+
+## Trends in the percentage of admissions with a subsequent readmission over time
+
+```{r, fig.width=12, fig.height=4}
+
+p1<-plot_readmissions_over_time(survival_data|>
+  filter(died_before_readmission_28days==0), readmit_28days, "Readmission within 28 days")
+p2<-plot_readmissions_over_time(survival_data|>
+  filter(died_before_readmission_1yr==0), readmit_1yr, "Readmission within 1 year")
+
+grid.arrange(p1, p2, ncol=2)
+```
+
+## Summary of percentage of patients readmitted within 1 year (2022/23)
+All admissions are counted an individual events, so some patients with multiple admissions will be included more than once.
+```{r, fig.height=8, fig.width=8}
+
+survived_to_readmission<-survival_data_2223|>
+  filter(died_before_readmission_1yr==0)
+ 
+ readmit<-furniture::table1(survived_to_readmission|>
+   filter(cohort=="falls")|>mutate(cohort="Total"), 
+   sex, age_range, ethnicity, imd_decile, cohort,
+         splitby= ~factor(mortality_1yr)*cohort, 
+         row_wise=TRUE,
+       format_number = TRUE)|>
+   as.data.frame()|>
+     select(-`0`)|> 
+   filter(.!="")|>
+   rename(`Falls`=`1`)|>
+   full_join(furniture::table1(survived_to_readmission|>
+   filter(cohort=="frail")|>mutate(cohort="Total"), 
+   sex, age_range, ethnicity, imd_decile, cohort,
+         splitby= ~factor(mortality_1yr)*cohort, 
+         row_wise=TRUE,
+       format_number = TRUE)|>
+   as.data.frame()|>
+     select(-`0`)|> 
+        filter(.!="")|>
+   rename(`Frail`=`1`))|>
+   full_join(furniture::table1(survived_to_readmission|>
+     filter(cohort=="elderly emergency")|>mutate(cohort="Total"), 
+   sex, age_range, ethnicity, imd_decile,cohort,
+         splitby= ~factor(mortality_1yr)*cohort, 
+         row_wise=TRUE,
+       format_number = TRUE)|>
+   as.data.frame()|>
+   select(-`0`)|>
+        filter(.!="")|>
+   rename(`Elderly Emergency`=`1`))%>%
+   replace(is.na(.), "N/A")|>
+   select(., `Elderly Emergency`, Frail, Falls)|>
+  rename(variable=.)|>
+    mutate(variable = str_replace_all(variable, "sex", "Sex"))|>
+    mutate(variable= str_replace_all(variable, "age_range", "Age"))|>
+      mutate(variable = str_replace_all(variable, "ethnicity", "Ethnicity"))|>
+    mutate(variable= str_replace_all(variable, "imd_decile", "IMD decile"))|>
+  mutate(variable=ifelse(variable=="cohort", "", variable))
+ 
+  readmit|>
+    flextable()|>
+    set_header_labels(variable="")|>
+    bg(bg = "#f9bf07", part = "header") |>
+    align(part = "body", align = "right")|>
+    align(j=1, part = "body", align = "left")|>
+      align(part = "header", align = "right")|>
+    fontsize(size = 11, part = "all")|>
+    padding(padding = 2, part = "all", padding.top=NULL) |>
+    bold(bold = TRUE, part="header")|>
+    bold(i=1, bold = TRUE, part="body")|>
+    bold(i=4, bold = TRUE, part="body")|>
+    bold(i=12, bold = TRUE, part="body")|>
+    bold(i=20, bold = TRUE, part="body")|>
+    bold(i=32, bold = TRUE, part="body")|>
+    line_spacing(space = 1.2, part = "body")|>
+    autofit()|>
+    htmltools_value(ft.align = "left")   
+
+ 
+ 
+ 
+```
 
 ## Comparing time to readmission between the cohorts using Kaplan-meier plots (2022/23)
 

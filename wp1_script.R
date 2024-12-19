@@ -1024,6 +1024,14 @@ adjusted_rate_sub_cohorts |>
        title = "Admission rate by ICB and sub-cohort",
        subtitle = "Age and sex adjusted rate per 1,000 population | SUS admissions 2023")
 
+# Plot above by avg_los 
+
+aggregate_data_frail
+
+
+
+aggregate_data
+
 ## Funnel plots ----
 
 # Create function to draw funell plots

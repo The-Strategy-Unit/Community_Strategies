@@ -1685,7 +1685,7 @@ Furthering our assessment of variation in treatment of these mitigable patient p
 
 This sub-strand of our descriptive analysis aims to investigate the risk of death or subsequent readmission in patients who have had an emergency hospital admission. We apply survival analysis techniques to help us understand what factors influence the risk of death or readmission, including determining variability between ICB area. 
 
-Full survival analysis output found here: <https://the-strategy-unit.github.io/Community_Strategies/community_strategy_survival_analysis.html#readmissions>
+Full survival analysis output found here: <https://the-strategy-unit.github.io/Community_Strategies/community_strategy_survival_analysis.html>
 
 ![Cox regression example](cox_prop_elderly_readmission.png)
 

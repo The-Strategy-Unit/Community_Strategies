@@ -16,6 +16,7 @@ format:
     toc-title: Summary
     toc-depth: 3
 editor: visual
+css: styles.css
 ---
 
 ```{r}
@@ -24,8 +25,6 @@ editor: visual
 #| echo: false
 #| warning: false
 
-#library(odbc)
-#library(DBI)
 library(tidyverse)
 library(janitor)
 library(DT)
@@ -33,10 +32,9 @@ library(sf)
 library(readxl)
 library(patchwork)
 library(GGally)
-library(ggVennDiagram)
-library(ggvenn)
 library(plotly)
 library(reshape2)
+library(ggrepel)
 
 knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE, fig.width =12, fig.height = 9)
 
@@ -435,6 +433,150 @@ combined_map_icb_rate_cohorts <-
     caption = 'Note: 1st quintile represents the lowest 20% admission rates'
   )
 
+# Create function to draw funell plots
+funnel_plot_function <- function(cohort, subtitle_text) {
+  
+  data <-
+    adjusted_rate_sub_cohorts |> 
+    filter(id_clean == {{cohort}}, 
+           year == 2023) |> 
+    left_join(icb_pop_2023_sex_age_range |> 
+                group_by(icb_2023_code) |> 
+                summarise(population = sum(population)),
+              by = c("icb23cd" = "icb_2023_code")
+              ) 
+  
+  mean_rate <- mean(data$adjusted_spell_rate)
+  sd_rate <- sd(data$adjusted_spell_rate)
+  
+  # Create the funnel plot
+  data |>
+    mutate(std_from_mean = (adjusted_spell_rate - mean_rate) / sd_rate) |> 
+    mutate(fill_text = 
+             case_when(std_from_mean >= 1 ~ "1. Above 1 SD",
+                       std_from_mean <= -1 ~ "3. Below 1 SD",
+                       TRUE ~ "2. Within 1 SD")) |>
+    mutate(icb_name_clean = str_sub(icb_name_short, 10,100)) |> 
+    mutate(icb_name_clean = str_remove_all(icb_name_clean, " ICB"))|> 
+    mutate(label = case_when(fill_text != "2. Within 1 SD" ~ icb_name_clean)) |> 
+    
+    ggplot(aes(x = population, y = adjusted_spell_rate, 
+               colour = fill_text, 
+               alpha = fill_text
+    )) +
+    geom_point(size = 4) +
+    geom_label_repel(aes(label = label), size = 5, show.legend = FALSE) +
+    geom_hline(yintercept = mean_rate, color = "blue", linetype = "dashed", linewidth = 1) +
+    geom_hline(yintercept = mean_rate + sd_rate, color = "red", linetype = "dotted", linewidth = 1) +
+    geom_hline(yintercept = mean_rate - sd_rate, color = "red", linetype = "dotted", linewidth = 1) +
+    scale_x_continuous(labels = scales::comma) +
+    scale_alpha_manual(values = c(1,0.2,1)) +
+    scale_color_SU() +
+    labs(x = "Population",
+         y = "Adjusted admission rate per 1,000",
+         title = "Variation in admission rates by ICB and underlying population",
+         subtitle = paste0("Subcohort: ", subtitle_text, " | 2023"),
+         colour = "",
+         alpha = ""
+    ) 
+}
+
+# 2x2 plots to compare admission rates in 2 cohorts on 1 graph
+
+compare_2_2_plots <- function(cohort_1, cohort_2, cohort_1_axis, cohort_2_axis) {
+  
+  data_cohort_1 <-
+    adjusted_rate_sub_cohorts |> 
+    filter(id_clean == {{cohort_1}}, 
+           year == 2023) 
+  
+  mean_rate_cohort_1 <- mean(data_cohort_1$adjusted_spell_rate)
+  sd_rate_cohort_1 <- sd(data_cohort_1$adjusted_spell_rate)
+  
+  data_cohort_2 <-
+    adjusted_rate_sub_cohorts |> 
+    filter(id_clean == {{cohort_2}}, 
+           year == 2023) 
+  
+  mean_rate_cohort_2 <- mean(data_cohort_2$adjusted_spell_rate)
+  sd_rate_cohort_2 <- sd(data_cohort_2$adjusted_spell_rate)
+  
+  # Plot
+  plot <-
+    data_cohort_1 |> 
+    mutate(std_from_mean_cohort_1 = (adjusted_spell_rate - mean_rate_cohort_1) / sd_rate_cohort_1) |> 
+    select(1:2, adjusted_spell_rate, std_from_mean_cohort_1) |> 
+    rename(cohort_1_adj_rate = adjusted_spell_rate) |> 
+    left_join(data_cohort_2 |> 
+                mutate(std_from_mean_cohort_2 = (adjusted_spell_rate - mean_rate_cohort_2) / sd_rate_cohort_2) |> 
+                select(1:2, adjusted_spell_rate, std_from_mean_cohort_2) |> 
+                rename(cohort_2_adj_rate = adjusted_spell_rate),
+              by = c("icb23cd", "icb_name_short")) |> 
+    rename(ICB = icb_name_short) |> 
+    
+    mutate(fill_text = 
+             case_when(
+               (std_from_mean_cohort_1 <= 1 & std_from_mean_cohort_1 >= -1) &
+                 (std_from_mean_cohort_2 <= 1 & std_from_mean_cohort_2 >= -1) ~ "A. Within 1 SD",
+               (std_from_mean_cohort_1 > 1 & std_from_mean_cohort_2 > 1) ~ "B. Above 1 SD",
+               (std_from_mean_cohort_1 < -1 & std_from_mean_cohort_2 < -1) ~ "C. Below 1 SD",
+               TRUE ~ "D. +/- 1 SD on one axis"
+             )) |> 
+    
+    ggplot(aes(x = cohort_1_adj_rate, y = cohort_2_adj_rate, 
+               colour = fill_text, alpha = fill_text, 
+               label =  ICB
+               )) +
+    geom_point(size = 3) +
+    
+    # Cohort 1 lines
+    geom_vline(xintercept = mean_rate_cohort_1, color = "blue", linetype = "dashed", linewidth = 0.3) +
+    geom_vline(xintercept = mean_rate_cohort_1 + sd_rate_cohort_1, color = "red", linetype = "dotted", linewidth = 0.25) +
+    geom_vline(xintercept = mean_rate_cohort_1 - sd_rate_cohort_1, color = "red", linetype = "dotted", linewidth = 0.25) +
+    
+    # Cohort 2 line
+    geom_hline(yintercept = mean_rate_cohort_2, color = "blue", linetype = "dashed", linewidth = 0.3) +
+    geom_hline(yintercept = mean_rate_cohort_2 + sd_rate_cohort_2, color = "red", linetype = "dotted", linewidth = 0.25) +
+    geom_hline(yintercept = mean_rate_cohort_2 - sd_rate_cohort_2, color = "red", linetype = "dotted", linewidth = 0.25) +
+    
+    scale_x_continuous(labels = scales::comma) +
+    scale_alpha_manual(values = c(0.3, 1, 1, 1)) + # Only shade out those within 1 SD on both axis
+    scale_color_SU() +
+    theme_SU() +
+    labs(x = paste0("Admission rate: ", cohort_1_axis),
+         y = paste0("Admission rate: ", cohort_2_axis),
+         colour = "",
+         alpha = ""
+         )
+  
+  #plot
+  
+  ggplotly(plot, tooltip = "label") |>
+    layout(
+      title = list(
+        text = "<b>Variation in admission rates by ICB</b><br>",
+        x = 0.05,  # Center the title
+        y = 0.95,
+        xanchor = "left",
+        font = list(size = 14)  # Title font size
+      ),
+      annotations = list(
+        list(
+          text = "<i>Comparison of adjusted admission rates by sub-cohort</i>",
+          x = -0.01,  # Center the title
+          y = 0.98,
+          xanchor = "left",
+          xref = "paper",
+          yref = "paper",
+          showarrow = FALSE,
+          font = list(size = 12)  # Subtitle font size
+          )
+        )
+      )
+}
+
+
+
 # Overlap in cohorts ----
 overlap_data <-
   aggregate_data %>%
@@ -586,6 +728,42 @@ patchwork_function <- function(data, title_text) {
   
 }
 
+# Patient characteristics ----
+
+# Top diagnoses by cohort
+read_diagnosis_list <- function(cohort) {
+
+  data <- 
+    read_csv(paste0("top_diagnoses/", cohort, ".csv")) |> 
+    clean_names() |> 
+    select(4,2) |> 
+    rename(Admissions = 2) |> 
+    arrange(desc(Admissions)) |> 
+    mutate(Proportion = round(Admissions/sum(Admissions)*100, 2)) |> 
+    rename(`Primary diagnosis` = icd10_l4_desc) |> 
+    head(10) |> 
+    mutate(Admissions = scales::comma(Admissions))
+  
+  data
+}
+
+# Top diagnoses by cohort
+read_procedures_list <- function(cohort) {
+  
+  data <- 
+    read_csv(paste0("top_procedures/", cohort, ".csv")) |> 
+    clean_names() |> 
+    select(4,2) |> 
+    rename(Admissions = 2) |> 
+    arrange(desc(Admissions)) |> 
+    mutate(Proportion = round(Admissions/sum(Admissions)*100, 2)) |> 
+    rename(`Primary procedure` = opcs_l4_desc) |> 
+    head(10) |> 
+    mutate(Admissions = scales::comma(Admissions))
+  
+  data
+}
+
 ```
 
 # Project specifications
@@ -593,34 +771,40 @@ patchwork_function <- function(data, title_text) {
 ::: {.callout-note icon="false"}
 ## Ask
 
-Size and describe patient cohorts and activity in the inpatient acute settings using National NHP model mitigators. 
+Size and describe patient cohorts and activity in the inpatient acute settings using National NHP model mitigators.
 
 Generate descriptive analysis to support onward analysis by NHSE analysts covering:
 
--   Number of patients, 
--   Levels of activity, 
--   Variation across the country, 
+-   Number of patients,
+-   Levels of activity,
+-   Variation across the country,
 -   Characteristics of patients
 :::
-
 
 # Outline
 
 ::: panel-tabset
 
-## 1. Size and describe
+## 1. Patient characteristics
+
+Describe the underlying patient demographics within out mitigable-activity sub-cohorts by:
+
+-   Age and sex
+-   Ethnicity and deprivation
+
+## 2. Size and describe
 
 Present activity totals and time-series trends for the combined mitigable-activity cohort and mitigator sub-cohorts.
 
 Measures include:
 
 -   Counts of patients, admissions and bed days:
-    +   In combined mitigable-activity cohort
-    +   By mitigator sub-cohorts
-    +   By ICB 
+    -   In combined mitigable-activity cohort
+    -   By mitigator sub-cohorts
+    -   By ICB
 -   Cohort activity as a share of all admissions
 
-## 2. Use variation
+## 3. Use variation
 
 Explore variation in age- and sex-adjusted admission rates to:
 
@@ -634,18 +818,10 @@ Apply survival analysis techniques to assess differences in care outcomes by pat
 -   Readmission post-acute inpatient care
 -   Motality post-acute inpatient care
 
-**Additional analysis:** 
+**Additional analysis:**
 
 -   Summary of care services/types that patients from mitigable cohorts are in contact with in the year prior to death.
 -   Comparison of location of death in mitigable patients that recieved acute inpatient care in the year prior to death.
-
-## 3. Patient characteristics
-
-Describe the underlying patient demographics within out mitigable-activity sub-cohorts by:
-
--   Age and sex
--   Ethnicity and deprivation
-
 
 ## 4. Mitigator overlap
 
@@ -665,6 +841,97 @@ Ranked table of activity in each mitigator with activity counts and proportion o
 :::
 
 <hr style="border-top: 2px solid #f9bf07">
+
+# Patient characteristics
+
+## Demographics
+
+In both our emergency elderly and frail patient groups, it is apparent that within the Black and Asian ethnic groups, the majority of patients are clustered in the most deprived IMD deciles (particularly deciles 2-4). However, when considering emergency elderly admissions, in larger group of White British patients, the proportion of patients gradually increases with affluence.
+
+::: panel-tabset
+### Emergency elderly
+
+```{r}
+patchwork_function(aggregate_data_elderly_emergency, "Emergency elderly patients")
+```
+
+### Frail
+
+```{r}
+patchwork_function(aggregate_data_frail, "Frail patients")
+```
+
+### Falls
+
+```{r}
+patchwork_function(aggregate_data_falls, "Falls patients")
+```
+
+### End-of-life
+
+```{r}
+patchwork_function(aggregate_data_eol, "End-of-life patients")
+```
+:::
+
+## Most frequent diagnoses
+
+::: panel-tabset
+### Emergency elderly
+
+```{r}
+create_dt(read_diagnosis_list("frail"))
+```
+
+### Frail
+
+```{r}
+create_dt(read_diagnosis_list("emergency_elderly"))
+```
+
+### Falls
+
+```{r}
+create_dt(read_diagnosis_list("falls"))
+```
+
+### End-of-life
+
+```{r}
+create_dt(read_diagnosis_list("eol"))
+```
+:::
+
+## Most frequent procedures
+
+::: panel-tabset
+### Emergency elderly
+
+```{r}
+create_dt(read_procedures_list("frail"))
+```
+
+### Frail
+
+```{r}
+create_dt(read_procedures_list("emergency_elderly"))
+```
+
+### Falls
+
+```{r}
+create_dt(read_procedures_list("falls"))
+```
+
+### End-of-life
+
+```{r}
+create_dt(read_procedures_list("eol"))
+```
+:::
+
+<hr style="border-top: 2px solid #f9bf07">
+
 
 # Size and describe
 
@@ -722,7 +989,6 @@ aggregate_data_core_cohorts %>%
   pivot_wider(id_cols = year, names_from = name, values_from = value)
 )
 ```
-
 :::
 
 Activity in the combined data set has gradually returned to pre-pandemic levels. While the increase in post-pandemic growth in spells has been gradual between 2021 and 2024, the length of time a person from our cohort has stayed in hospital has risen quickly to surpass pre-pandemic levels. The graph above suggests a change in the average length of stay particularly between 2021 and 2023, after which bed-days associated with our activity have plateaued.
@@ -1170,30 +1436,25 @@ create_dt(
 ```
 :::
 
-The trends in mitigable activity by ICB vary significantly. 
+The trends in mitigable activity by ICB vary significantly.
 
 Data quality issues are apparent in a handful of ICB's:
 
--   Frimley, 
--   Shropshire, 
--   Telford and Wrekin, 
--   Cambs & Peterborough and 
--   Dorset. 
+-   Frimley,
+-   Shropshire,
+-   Telford and Wrekin,
+-   Cambs & Peterborough and
+-   Dorset.
 
 While some ICB's display sustained reductions in mitigable admissions:
 
--   South West London, 
--   West Yorkshire and 
--   Lincolnshire. 
+-   South West London,
+-   West Yorkshire and
+-   Lincolnshire.
 
-
-Others show significant growth in activity: 
--   Devon, 
--   Staffordshire & Stoke-on-Trent and 
--   South Yorkshire for example.
+Others show significant growth in activity: - Devon, - Staffordshire & Stoke-on-Trent and - South Yorkshire for example.
 
 Are boundary changes impactful here?
-
 
 ### Share of total activity in ICB
 
@@ -1252,7 +1513,6 @@ To account for differences in the underlying number of elderly patients in each 
 -   **Line inside the box:** This is the median, which divides the box into two equal halves.
 -   **Whiskers:** The whiskers extend from the box to show the range of the data, excluding outliers.
 -   **Dots:** Individual data points that fall outside the whiskers are considered outliers.
-
 :::
 
 Admission rates range from 25-55 admissions per 1,000 population between our ICB's during our data collection period. While the general trend in admission rates is increasing, there is significant variation between ICB's over the last 5 years, having accounted for age and sex structure.
@@ -1348,80 +1608,117 @@ adjusted_rate_sub_cohorts |>
        subtitle = "Age and sex adjusted rate per 1,000 population | SUS admissions 2023")
 ```
 
-# Variation in outcomes (place holder)
-
-Link to survival analysis output...
-
-
-<hr style="border-top: 2px solid #f9bf07">
-
-# Patient characteristics
-
-In both our emergency elderly and frail patient groups, it is apparent that within the Black and Asian ethnic groups, the majority of patients are clustered in the most deprived IMD deciles (particularly deciles 2-4). However, when considering emergency elderly admissions, in larger group of White British patients, the proportion of patients gradually increases with affluence.
+### Funnel plots
 
 ::: panel-tabset
-
-## Emergency elderly
+#### Frail
 
 ```{r}
-patchwork_function(aggregate_data_elderly_emergency, "Emergency elderly patients")
+funnel_plot_function("A. Frail", "Frail")
 ```
 
+#### Emergency elderly
 
-## Frail
 ```{r}
-patchwork_function(aggregate_data_frail, "Frail patients")
+funnel_plot_function("B. Emergency elderly", "Emergency elderly")
 ```
 
+#### Falls
 
-## Falls
 ```{r}
-patchwork_function(aggregate_data_falls, "Falls patients")
+funnel_plot_function("C. Falls", "Falls")
 ```
 
+#### End of life
 
-## End-of-life
 ```{r}
-patchwork_function(aggregate_data_eol, "End-of-life patients")
+funnel_plot_function("D. End of life", "End of life")
+```
+:::
+
+### 2x2 plots
+
+:::panel-tabset
+
+#### Frail x Emergency elderly
+
+```{r}
+compare_2_2_plots("A. Frail", "B. Emergency elderly", "Frail", "Emergency elderly")
 ```
 
+#### Frail x Falls
+
+```{r}
+compare_2_2_plots("A. Frail", "C. Falls", "Frail", "Falls")
+```
+
+#### Frail x End of life
+
+```{r}
+compare_2_2_plots("A. Frail", "D. End of life", "Frail", "End of life")
+```
+
+#### Emergency elderly x Falls
+
+```{r}
+compare_2_2_plots("B. Emergency elderly", "C. Falls", "Emergency elderly", "Falls")
+```
+
+#### Emergency elderly x End of life
+
+```{r}
+compare_2_2_plots("B. Emergency elderly", "D. End of life", "Emergency elderly", "End of life")
+```
+
+#### Falls x End of life
+
+```{r}
+compare_2_2_plots("C. Falls", "D. End of life", "Falls", "End of life")
+```
 
 :::
 
+
+## Variation in outcomes 
+
+Furthering our assessment of variation in treatment of these mitigable patient populations, we analyse variation in selected patient outcomes; readmission and mortality.
+
+This sub-strand of our descriptive analysis aims to investigate the risk of death or subsequent readmission in patients who have had an emergency hospital admission. We apply survival analysis techniques to help us understand what factors influence the risk of death or readmission, including determining variability between ICB area. 
+
+Full survival analysis output found here: <https://the-strategy-unit.github.io/Community_Strategies/community_strategy_survival_analysis.html>
+
+![Cox regression example](cox_prop_elderly_readmission.png)
+
+
 <hr style="border-top: 2px solid #f9bf07">
+
 
 # Mitigator overlap
 
-## Identify interplay between cohorts
-
-Next, we assess the correlation of admission rates between cohorts.
+Finally, explore the correlation and overlap between and within the cohorts included within the Community Strategies analysis.
 
 ```{r}
 compare_admission_rates |> 
   ggpairs(columns = 2:5, 
-          #title = "Admission Rates per ICB for 4 Sub-Cohorts",
           upper = list(continuous = wrap("cor", size = 3)),
           lower = list(continuous = wrap("points", alpha = 0.6, size = 1.5)),
           diag = list(continuous = wrap("densityDiag", alpha = 0.5))) +
-  #theme(strip.background = element_rect(fill = NA, colour = "grey")) +
-  StrategyUnitTheme::su_theme() +
+  theme_SU() +
+  theme(strip.background = element_rect(fill = NA, colour = "grey")) +
   labs(title = "Admission Rates per ICB for mitigable sub-cohorts",
        subtitle = "SUS adjusted admission rate per 1,000 | 2023",
        x = "Admission rate")
 ```
 
 
-## Venn diagram (place holder)
+Full analysis on overlap found here: <https://the-strategy-unit.github.io/Community_Strategies/identifying_overlap_between_cohorts.html>
 
-```{r}
-ggVennDiagram(venn_data) +
-  scale_fill_gradient(low = "white", high = "#f9bf07") +
-  theme_minimal() +
-  labs(title = "Venn Diagram of Patient Cohorts Sized by Spells")
-```
+![Overlap Venn diagram example](overlap_venn_plot.png)
 
 
+# Contact
 
+If you have any questions or comments regarding any of the above analysis please email <strategy.unit@nhs.net> citing the NHSE Community Services Analysis.
 
 
 

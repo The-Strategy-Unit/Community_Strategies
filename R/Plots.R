@@ -186,13 +186,7 @@ plot_comparing_cohorts_deaths<-function(data){
   
   dataframe<-deparse(substitute(data))
   
-  if (dataframe=="survival_data_2223_survived_1yr"){
-    plot<-km_graph2(fit, "cohort=", "readmission" )
-  }
-  
-  if (dataframe!="survival_data_2223_survived_1yr"){
-    plot<-km_graph(fit, "cohort=", "readmission" )
-  }
+    plot<-km_graph(fit, "cohort=", "death" )
  
  plot+
     theme(axis.title.y = element_text(vjust=5, hjust=0.5))+

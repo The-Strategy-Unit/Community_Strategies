@@ -170,9 +170,7 @@ The patient cohorts included within this analysis are:
 
 Overlap of the patients between cohorts is determined. The Venn diagrams are coloured so that the largest groups/overlap is shown in red and the smallest groups/overlap is shown in blue. The Upset plots show only the largest groups/overlaps. Values and percentages on the Venn diagrams will be slightly different to those on the Upset plots as the Venn diagrams only contain a maximum of 5 groups, whereas the Upset plots contain all groups. All data shown is for 2023/24.
 
-
-
-## Size of cohorts 
+## Size of cohorts
 
 ```{r}
 
@@ -218,12 +216,9 @@ table_of_overlap<-table_of_overlap|>
 create_dt(table_of_overlap)
 ```
 
-
 ## Overlap between cohorts (2023/24)
 
 There is significant overlap between the frail and elderly emergency cohorts, which is to be expected given they are the largest cohorts and the frail cohort is generally a subset of the elderly admissions cohort with some additional patients aged 65-74 years. There is also a considerable overlap between the elderly emergency and frail cohorts and the expanded EOL and falls cohorts.
-
-
 
 ::: panel-tabset
 #### Venn Diagrams
@@ -291,9 +286,6 @@ Plot_venn_diagram_5groups(cohort_overlap_data_2324,
 
 #https://krassowski.github.io/complex-upset/articles/Examples_R.html#adjusting-the-default-themes
 
-plot_upset_plot(cohort_overlap_data_2324, 17, 330000)
-
-
 
 upset_plot_data<-cohort_overlap_data_2324
 
@@ -332,7 +324,7 @@ ComplexUpset::upset(upset_plot_data, cohorts, name='Cohorts',
 
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot(cohort_overlap_data_2324, 17, 330000)
+plot_upset_plot_individual_acsc(cohort_overlap_data_2324, 17, 330000)
 
 ```
 :::
@@ -341,11 +333,10 @@ plot_upset_plot(cohort_overlap_data_2324, 17, 330000)
 
 Given the cohorts are significantly different sizes to better understand the degree of overlap in each group we have looked individually at those in each cohort to determine how many people are solely in the cohort of interest and with which other cohorts is there the greatest overlap.
 
-
 ::: panel-tabset
 #### Emergency Elderly
 
-Of those in the elderly emergency cohort, 27% are solely in this cohort. The elderly emergency cohort has the greatest overlap with the frail and expanded EOL cohorts. 
+Of those in the elderly emergency cohort, 27% are solely in this cohort. The elderly emergency cohort has the greatest overlap with the frail and expanded EOL cohorts.
 
 ```{r, fig.width=10, fig.height=6}
 
@@ -386,7 +377,6 @@ gather(key=Cohort, value=`Number of people`)|>
 
 ```
 
-
 #### Frail
 
 Of those in the frail cohort, 17% are solely in this cohort, there is considerable overlap with the elderly emergency, expanded EOL and falls cohorts.
@@ -396,7 +386,6 @@ Of those in the frail cohort, 17% are solely in this cohort, there is considerab
 plot_upset_plot(cohort_overlap_data_2324|>filter(Frail==1),15, 330000)
 
 ```
-
 
 ```{r, fig.width=8, fig.height=4}
 
@@ -437,7 +426,6 @@ plotting_barchart_summary_of_overlaps(cohort_overlap_data_2324, EOL, "Number (%)
 
 Of those in the expanded EOL cohort, 25% are solely in this cohort. There is considerable overlap between this group and the elderly emergency and frail cohorts.
 
-
 ```{r, fig.width=10, fig.height=6}
 
 plot_upset_plot(cohort_overlap_data_2324|>filter(`Expanded EOL`==1),15, 150000)
@@ -455,7 +443,7 @@ Of those in the ambulatory sensitive care cohorts, 28.5% are solely in the acute
 
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot(cohort_overlap_data_2324|>filter(`ACSC All`==1),15, 210000)
+plot_upset_plot_individual_acsc(cohort_overlap_data_2324|>filter(`ACSC All`==1),15, 210000)
 
 ```
 
@@ -464,19 +452,16 @@ plot_upset_plot(cohort_overlap_data_2324|>filter(`ACSC All`==1),15, 210000)
 plotting_barchart_summary_of_overlaps(cohort_overlap_data_2324, `ACSC All`, "Number (%) of Ambulatory Care Sensitive Conditions cohort that are included within other cohorts") 
 
 ```
-
 :::
 
 ## Differences in cohort overlap by age
 
-In those under 75 years the majority are within either frail, ACSC cohort or expanded EOL cohorts, with relatively little overlap between the cohorts. In those over 75 there is more overlap between cohorts, the majority are in the elderly emergency cohort with considerable overlap with the frail and expanded EOL cohorts.  
+In those under 75 years the majority are within either frail, ACSC cohort or expanded EOL cohorts, with relatively little overlap between the cohorts. In those over 75 there is more overlap between cohorts, the majority are in the elderly emergency cohort with considerable overlap with the frail and expanded EOL cohorts.
 
-
-:::panel-tabset
-
+::: panel-tabset
 #### Venn diagrams
 
-::: columns 
+::: columns
 ::: {.column width="50%"}
 ```{r, fig.width=8, fig.height=8}
 Plot_venn_diagram_5groups(cohort_overlap_data_2324|>filter(age_range=="<60"|age_range=="60-64"|age_range=="65-69"|age_range=="70-74"), 
@@ -489,7 +474,6 @@ Plot_venn_diagram_5groups(cohort_overlap_data_2324|>filter(age_range=="<60"|age_
 
 
 ```
-
 :::
 
 ::: {.column width="50%"}
@@ -507,10 +491,8 @@ Plot_venn_diagram_5groups(cohort_overlap_data_2324|>filter(age_range!="<60" & ag
 :::
 :::
 
-
-::: columns 
+::: columns
 ::: {.column width="50%"}
-
 ```{r, eval=FALSE}
 Plot_venn_diagram(cohort_overlap_data_2324|>filter(age_range=="<60"|age_range=="60-64"|age_range=="65-69"|age_range=="70-74"), 
                   "Elderly Emergency",
@@ -521,7 +503,6 @@ Plot_venn_diagram(cohort_overlap_data_2324|>filter(age_range=="<60"|age_range=="
 
 
 ```
-
 :::
 
 ::: {.column width="50%"}
@@ -537,18 +518,19 @@ Plot_venn_diagram(cohort_overlap_data_2324|>filter(age_range!="<60" & age_range!
 
 ```
 :::
-
 :::
 
 #### Upset plots
 
 **Under 75 years of age**
+
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot(cohort_overlap_data_2324|>filter(age_range=="<60"|age_range=="60-64"|age_range=="65-69"|age_range=="70-74"),15, 330000)
+plot_upset_plot(cohort_overlap_data_2324|>filter(age_range=="<60"|age_range=="60-64"|age_range=="65-69"|age_range=="70-74"),15, 450000)
 ```
 
 **75 years of age and over**
+
 ```{r, fig.width=10, fig.height=6}
 
 plot_upset_plot(cohort_overlap_data_2324|>filter(age_range!="<60" & age_range!="60-64" & age_range!="65-69"&age_range!="70-74"),15, 330000)
@@ -559,13 +541,11 @@ plot_upset_plot(cohort_overlap_data_2324|>filter(age_range!="<60" & age_range!="
 
 Generally the distribution and patterns of overlap are similar between men and women. However, male patients are more likely to be in the solely frail cohort, whereas female patients are less likely to be in the solely frail cohort, but more likely to be in the frail, elderly emergency and falls cohorts.
 
-:::panel-tabset
-
+::: panel-tabset
 #### Venn diagrams
 
-::: columns 
+::: columns
 ::: {.column width="50%"}
-
 ```{r, fig.width=8, fig.height=8}
 Plot_venn_diagram_5groups(cohort_overlap_data_2324|>filter(sex=="male"), 
                   "Frail",
@@ -590,9 +570,7 @@ Plot_venn_diagram_5groups(cohort_overlap_data_2324|>filter(sex=="female"),
 
 ```
 :::
-
 :::
-
 
 ::: columns
 ::: {.column width="50%"}
@@ -623,15 +601,17 @@ Plot_venn_diagram(cohort_overlap_data_2324|>filter(sex=="female"),
 #### Upset plots
 
 **Male**
+
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot(cohort_overlap_data_2324|>filter(sex=="male"),15, 180000)
+plot_upset_plot(cohort_overlap_data_2324|>filter(sex=="male"),15, 200000)
 ```
 
 **Female**
+
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot(cohort_overlap_data_2324|>filter(sex=="female"),15, 180000)
+plot_upset_plot(cohort_overlap_data_2324|>filter(sex=="female"),15, 230000)
 ```
 :::
 
@@ -639,9 +619,7 @@ plot_upset_plot(cohort_overlap_data_2324|>filter(sex=="female"),15, 180000)
 
 Those in the most deprived areas (IMD decile 1 & 2) are most likely to be in the acute or chronic ambulatory care sensitive cohorts, while those in the most affluent areas (IMD decile 9 & 10) are more likely to be in the elderly emergency cohort.
 
-
-:::panel-tabset
-
+::: panel-tabset
 #### Venn diagrams
 
 ::: columns
@@ -673,11 +651,8 @@ Plot_venn_diagram_5groups(cohort_overlap_data_2324|>filter(imd_decile=="9"|imd_d
 :::
 :::
 
-
-
-::: columns 
+::: columns
 ::: {.column width="50%"}
-
 ```{r, eval=FALSE}
 Plot_venn_diagram(cohort_overlap_data_2324|>filter(imd_decile=="1"|imd_decile=="2"), 
                   "Elderly Emergency",
@@ -686,7 +661,6 @@ Plot_venn_diagram(cohort_overlap_data_2324|>filter(imd_decile=="1"|imd_decile=="
                   "ACSC All",
                   "Overlap of cohorts for patients living in the most deprived areas (IMD decile 1 & 2)")
 ```
-
 :::
 
 ::: {.column width="50%"}
@@ -702,30 +676,30 @@ Plot_venn_diagram(cohort_overlap_data_2324|>filter(imd_decile=="9"|imd_decile=="
 
 ```
 :::
-
 :::
 
 #### Upset plots
+
 **Most deprived areas (IMD deciles 1 & 2)**
+
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot(cohort_overlap_data_2324|>filter(imd_decile=="1"|imd_decile=="2"),15, 80000)
+plot_upset_plot(cohort_overlap_data_2324|>filter(imd_decile=="1"|imd_decile=="2"),15, 130000)
 ```
 
 **Least deprived areas (IMD deciles 9 & 10)**
+
 ```{r, fig.width=10, fig.height=6}
 
 plot_upset_plot(cohort_overlap_data_2324|>filter(imd_decile=="9"|imd_decile=="10"),15, 80000)
 ```
-
 :::
 
 ## Differences in cohort overlap by ethnicity
 
 Those who are White British were most commonly in the elderly emergency cohort, and in both the elderly emergency and frail cohorts. Those of all other ethnicities were most commonly in the acute ambulatory care sensitive conditions cohort. The second most common cohort in all those who were not white was the chronic ambulatory care sensitive conditions cohort.
 
-:::panel-tabset
-
+::: panel-tabset
 #### Venn diagrams
 
 ::: columns
@@ -793,39 +767,46 @@ Plot_venn_diagram_5groups(cohort_overlap_data_2324|>filter(ethnicity=="Other"),
 :::
 
 #### Upset plots
+
 **White British**
+
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="White British"),15, 260000)
+plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="White British"),15, 280000)
 ```
 
 **Asian/Asian British**
+
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="Asian/Asian British"),15, 20000)
+plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="Asian/Asian British"),15, 40000)
 ```
 
 **Black/ Black British**
+
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="Black/Black British"),15, 8000)
+plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="Black/Black British"),15, 18000)
 ```
 
 **White Other**
+
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="White Other"),15, 14000)
+plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="White Other"),15, 26000)
 ```
 
 **Mixed**
+
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="Mixed"),15, 6000)
+plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="Mixed"),15, 10000)
 ```
 
 **Other**
+
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="Other"),15, 8000)
+plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="Other"),15, 15000)
 ```
 :::

@@ -43,7 +43,7 @@ table_of_overlap_values<-function(data){
   
 upset_plot_data<-data
 
-cohorts = colnames(upset_plot_data)[7:15]
+cohorts = colnames(upset_plot_data)[7:14]
 
 upset_plot_data[cohorts] = upset_plot_data[cohorts] == 1
 
@@ -175,14 +175,15 @@ Plot_venn_diagram_5groups<-function(data, cohort1, cohort2, cohort3, cohort4, co
 
 
 
-# Function to generate upset plot
+# Function to generate upset plot with ACSC ALL
 
 plot_upset_plot<-function(data,number_of_overlaps,y_axis  ){
   
 
-upset_plot_data<-data
+upset_plot_data<-data|>
+  select(-`ACSC Chronic`, -`ACSC Acute`, -`ACSC Vaccine Preventable`)
 
-cohorts = colnames(upset_plot_data)[7:15]
+cohorts = colnames(upset_plot_data)[7:12]
 
 upset_plot_data[cohorts] = upset_plot_data[cohorts] == 1
 
@@ -205,7 +206,7 @@ ComplexUpset::upset(upset_plot_data, cohorts, name='Cohorts',
                           text=list(size=3),
                           bar_number_threshold = 1)+
                           theme_classic()+
-                          theme(axis.title.y = element_text(size=14, vjust=-24),
+                          theme(axis.title.y = element_text(size=14, vjust=-16),
                                 axis.text.y=element_text(size=10),
                                 axis.title.x=element_blank(),
                                 axis.text=element_blank()))+
@@ -213,3 +214,40 @@ ComplexUpset::upset(upset_plot_data, cohorts, name='Cohorts',
                       )))
       }
  
+# Function to generate upset plot with INDIVIDUAL ACSC
+
+plot_upset_plot_individual_acsc<-function(data,number_of_overlaps,y_axis  ){
+  
+  
+  upset_plot_data<-data
+  
+  cohorts = colnames(upset_plot_data)[7:14]
+  
+  upset_plot_data[cohorts] = upset_plot_data[cohorts] == 1
+  
+  size = get_size_mode('exclusive_intersection')
+  
+  ComplexUpset::upset(upset_plot_data, cohorts, name='Cohorts', 
+                      width_ratio=0.1, n_intersections=number_of_overlaps,
+                      set_sizes=FALSE,
+                      keep_empty_groups=FALSE,
+                      themes=(upset_modify_themes(
+                        list(
+                          'intersections_matrix'=theme(text=element_text(size=13),
+                                                       axis.title.x=element_blank())
+                        ))),
+                      base_annotations = list(
+                        'Intersection size'=(
+                          intersection_size(
+                            text_mapping=aes(
+                              label=paste0(round(!!get_size_mode('exclusive_intersection')/nrow(upset_plot_data) * 100, 1), '%', '\n ', !!size )  ) , 
+                            text=list(size=3),
+                            bar_number_threshold = 1)+
+                            theme_classic()+
+                            theme(axis.title.y = element_text(size=14, vjust=-16),
+                                  axis.text.y=element_text(size=10),
+                                  axis.title.x=element_blank(),
+                                  axis.text=element_blank()))+
+                          scale_y_continuous(limits=c(0,y_axis), expand=c(0,0)
+                          )))
+}

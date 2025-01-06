@@ -164,8 +164,6 @@ Survival analysis has been conducted using data from 2023/23 for
 
 Note: Frimley ICB has been removed from the analysis due to missing data.
 
-
-
 # Mortality
 
 The time from when a patient first had an emergency admission and first entered the cohort until death was calculated. Those who died on the same day as their emergency admission when they first entered the cohort were excluded.
@@ -254,7 +252,6 @@ Generally the proportion of deaths within either 28 days or 1 year have remained
 
 
 ```
-
 
 ## Comparing time to death between the cohorts using Kaplan-meier plot (2022/23)
 
@@ -780,6 +777,7 @@ The proportion of patient with a readmission is higher in the elderly emergency 
 A lower percentage of readmissions within 1 year is to be expected for those admitted in 2023/24 as there is not a full year of follow-up and some readmissions will have not yet occurred.
 
 ## Summary of percentage of patients readmitted within 1 year (2022/23)
+
 All admissions are counted an individual events, so some patients with multiple admissions will be included more than once.
 
 ```{r, fig.height=8, fig.width=8}
@@ -1377,7 +1375,9 @@ grid.arrange(p1, p2, ncol=2)
 ```
 
 ## Summary of percentage of patients readmitted within 1 year (2022/23)
+
 All admissions are counted an individual events, so some patients with multiple admissions will be included more than once.
+
 ```{r, fig.height=8, fig.width=8}
 
 survived_to_readmission<-survival_data_2223|>

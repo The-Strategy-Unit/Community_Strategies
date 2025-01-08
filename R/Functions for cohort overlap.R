@@ -91,6 +91,7 @@ plotting_barchart_summary_of_overlaps<-function(data, group, title){
   total_number<-sum(data[[group_name]])
 
 cohort_overlap_data_2324|>
+  select(-`ACSC Acute`,-`ACSC Chronic`,-`ACSC Vaccine Preventable`  )|>
   filter({{group}}==1)|>
   summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE)))|>
   gather(key=cohort, value=number)|>
@@ -114,7 +115,42 @@ cohort_overlap_data_2324|>
   scale_y_continuous(limits=c(0, total_number*1.2), expand=c(0,0))
 
 
-   }
+}
+
+# Summary barchart of percentage of overlap with different groups
+
+plotting_barchart_summary_of_overlaps_individual_acsc<-function(data, group, title){
+  
+  group_name<-deparse(substitute(group))
+  
+  total_number<-sum(data[[group_name]])
+  
+  cohort_overlap_data_2324|>
+    filter({{group}}==1)|>
+    summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE)))|>
+    gather(key=cohort, value=number)|>
+    mutate(total=total_number)|>
+    mutate(percentage=round(((number/total))*100,1))|>
+    arrange(desc(percentage))|>
+    mutate(cohort=factor(cohort, unique(cohort)))|>
+    ggplot(aes(x=cohort, y=number))+
+    geom_bar(stat="identity")+
+    su_theme()+
+    theme(axis.text=element_text(size=10.5),
+          axis.title.y=element_text(size=14))+
+    labs(y="Number of Patients",
+         x=NULL,
+         title=title)+ 
+    scale_x_discrete(
+      labels = function(x) str_wrap(x, width = 7),
+      drop = FALSE
+    )+
+    geom_text(aes(label=paste0(number, ' \n(',percentage, '%)'), vjust=-0.2))+
+    scale_y_continuous(limits=c(0, total_number*1.2), expand=c(0,0))
+  
+  
+}
+
 
 # Function to general venn diagrams
 

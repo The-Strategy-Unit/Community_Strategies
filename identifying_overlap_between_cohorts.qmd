@@ -449,7 +449,7 @@ plot_upset_plot_individual_acsc(cohort_overlap_data_2324|>filter(`ACSC All`==1),
 
 ```{r, fig.width=8, fig.height=4}
 
-plotting_barchart_summary_of_overlaps(cohort_overlap_data_2324, `ACSC All`, "Number (%) of Ambulatory Care Sensitive Conditions cohort that are included within other cohorts") 
+plotting_barchart_summary_of_overlaps_individual_acsc(cohort_overlap_data_2324, `ACSC All`, "Number (%) of Ambulatory Care Sensitive Conditions cohort that are included within other cohorts") 
 
 ```
 :::

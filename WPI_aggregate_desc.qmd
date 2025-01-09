@@ -280,12 +280,38 @@ icb_pop_2023_sex_age_range <-
   mutate(sex = as.numeric(ifelse(grepl("^m", age_sex), "1", "2")),
          age = as.numeric(sub("^[mf]", "", age_sex))) %>%
   mutate(age_range = 
-           cut(age, 
-               breaks = seq(0, 90, by = 5), 
-               right = FALSE, 
-               labels = paste(seq(0, 85, by = 5))
-               )
-         ) %>% 
+           case_when(
+             age >= 0 & age <= 4 ~ "0-4",
+             age >= 5 & age <= 9 ~ "5-9",
+             age >= 10 & age <= 14 ~ "10-14",
+             age >= 15 & age <= 19 ~ "15-19",
+             age >= 20 & age <= 24 ~ "20-24",
+             age >= 25 & age <= 29 ~ "25-29",
+             age >= 30 & age <= 34 ~ "30-34",
+             age >= 35 & age <= 39 ~ "35-39",
+             age >= 40 & age <= 44 ~ "40-44",
+             age >= 45 & age <= 49 ~ "45-49",
+             age >= 50 & age <= 54 ~ "50-54",
+             age >= 55 & age <= 59 ~ "55-59",
+             age >= 60 & age <= 64 ~ "60-64",
+             age >= 65 & age <= 69 ~ "65-69",
+             age >= 70 & age <= 74 ~ "70-74",
+             age >= 75 & age <= 79 ~ "75-79",
+             age >= 80 & age <= 84 ~ "80-84",
+             age >= 85 & age <= 89 ~ "85-89",
+             age >= 90 & age <= 94 ~ "90-94",
+             age >= 95 & age <= 99 ~ "95-99",
+             age >= 100 & age <= 104 ~ "100-104",
+             age >= 105 ~ "105+",
+             TRUE ~ NA
+             )) %>% 
+  #mutate(age_range = 
+  #         cut(age, 
+  #             breaks = seq(0, 90, by = 5), 
+  #             right = FALSE, 
+  #             labels = paste(seq(0, 85, by = 5))
+  #             )
+  #       ) %>% 
   group_by(icb_2023_code, icb_2023_name, sex, age_range) %>% 
   summarise(population = sum(population, na.rm= TRUE)) %>%
   ungroup() %>% 
@@ -379,6 +405,11 @@ crude_spell_rate <-
                    "sex", "age_range"), keep = F) %>%
   mutate(spell_rate = spells/population)
 
+# Avg LoS by ICB
+avg_los_icb_cohort <- 
+  read_csv("avg_los_icb_cohort.csv") %>% 
+  clean_names()
+
 # Create pairs plot
 compare_admission_rates <-
   adjusted_rate_sub_cohorts |> 
@@ -389,7 +420,7 @@ compare_admission_rates <-
               values_from = adjusted_spell_rate) |> 
   select(icb_name_short,`A. Frail`, `B. Emergency elderly`, `C. Falls`, `D. End of life`) 
 
-thresholds <- sapply(compare_admission_rates[, 2:5], function(x) quantile(x, 0.9))
+thresholds <- sapply(compare_admission_rates[, 2:5], function(x) quantile(x, 0.9, na.rm = T))
 
 
 # Admission rate map 
@@ -651,15 +682,16 @@ spell_proportion <- function(data, label_input) {
     select(month, cohort_spells, denom_spells, prop, id)
   }
 
-# Patient characteristics 
+# Patient characteristics ----
 
 patchwork_function <- function(data, title_text) {
   
   # Plot 1
   plot_1 <-
     data %>% 
+    drop_na(age_range) %>% 
     filter(year == 2023,
-           age_range < 100) %>% 
+           !age_range %in% c("100-104","105-109")) %>% 
     group_by(age_range, sex) %>% 
     summarise(pts = sum(person_n)) |> 
     mutate(pts_2 = 
@@ -668,9 +700,8 @@ patchwork_function <- function(data, title_text) {
     mutate(sex = 
              case_when(sex == 1 ~ "Male",
                        TRUE ~ "Female")) %>%
-    mutate(age_range_text = paste(age_range, "-", age_range+4)) |> 
     
-    ggplot(aes(x = pts_2, y = age_range_text, fill = sex)) +
+    ggplot(aes(x = pts_2, y = age_range, fill = sex)) +
     geom_col() +
     geom_vline(xintercept = 0) +
     scale_fill_SU() +
@@ -682,13 +713,15 @@ patchwork_function <- function(data, title_text) {
          y = "Age-range",
          fill = "Sex:",
          subtitle = "Age and sex distribution",
-         #subtitle = "2023"
          )
+  
   
   # Plot 2
   ethnicity_imd <-
     data |> 
-    filter(year == 2023) |>
+    drop_na(age_range) %>% 
+    filter(year == 2023,
+           !age_range %in% c("100-104","105-109")) %>% 
     mutate(ethnic_group = str_sub(ethnic_group, 1,1)) %>% 
     left_join(ethnicity_lookup, by = c("ethnic_group" = "Code")) |> 
     group_by(Description, imd_decile) |> 
@@ -713,11 +746,10 @@ patchwork_function <- function(data, title_text) {
     scale_fill_gradient(low = "#686f73", high = "#f9bf07") +
     theme(legend.position = "bottom",
           plot.subtitle = element_text(hjust = 0.5)
-          ) +
+    ) +
     labs(x = "IMD Decile",
          y = "Ethnic Group",
          subtitle = "IMD distribution in patient ethnicity groups",
-         #subtitle = "Frail cohort 2023",
          fill = "Proportion (%)"
     ) 
   
@@ -727,8 +759,6 @@ patchwork_function <- function(data, title_text) {
   
   
 }
-
-# Patient characteristics ----
 
 # Top diagnoses by cohort
 read_diagnosis_list <- function(cohort) {
@@ -784,7 +814,6 @@ Generate descriptive analysis to support onward analysis by NHSE analysts coveri
 # Outline
 
 ::: panel-tabset
-
 ## 1. Patient characteristics
 
 Describe the underlying patient demographics within out mitigable-activity sub-cohorts by:
@@ -837,6 +866,94 @@ Outputs include:
 ## 5. Additional deliverable(s)
 
 Ranked table of activity in each mitigator with activity counts and proportion of activity
+:::
+
+<hr style="border-top: 2px solid #f9bf07">
+
+# Cohort definition
+
+In keeping with the wider context of this work, we have recreated mitigable activity cohorts used elsewhere in the New Hospital Programme (NHP) Demand and Capacity Model. Our extracts differ primarily in datasource, where the NHP model is built using Hosptial Episode Data (HES) while we have accessed Secondary Uses Service (SUS) data via the National Commissioning Data Repository (NCDR) portal. As such, we have included data between April 2018 and August 2024 and include activity from across England.
+
+Full SQL queries used to define our patient cohorts can be found on the project github repository: [sql_queries](https://github.com/The-Strategy-Unit/Community_Strategies/tree/main/sql).
+
+Details of the original NHP queries can be found here: [NHP mitigators](https://connect.strategyunitwm.nhs.uk/nhp/project_information/modelling_methodology/activity_mitigators/inpatient_activity_mitigators.html).
+
+::: panel-tabset
+
+### Emergency elderly
+
+Admissions included in our emergency elderly cohort are all emergency admissions in patients aged 75 and older (Admission_Method LIKE "2%" - details [here](https://www.datadictionary.nhs.uk/attributes/admission_method.html)). 
+
+
+### Frail
+
+Admissions included in our Frail cohort are all emergency admissions in patients aged 65 and older that include a Spell_Primary_Diagnosis code indicating frailty as the cause of the admission. This is different to the NHP frailty definition which focuses only on patients aged 75 years and older.
+
+::: {.callout-caution collapse="true"}
+## Expand To view ICD10 frailty diagnosis codes:
+
+LEFT([Spell_Primary_Diagnosis],3) IN (
+'F00','G81','G30','I69','R29','R39','F05','W19',
+'S00','R31','B96','R41','R26','I67','R56','R40',
+'T83','S06','S42','E87','M25','E86','R54','Z50',
+'F03','W18','Z75','F01','S80','L03','H54','E53',
+'Z60','G20','R55','S22','K59','N17','L89','Z22',	
+'B95','L97','R44','K26','I95','N19','A41','Z87',	
+'J96','X59','M19','G40','M81','S72','S32','E16',	
+'R94','N18','R33','R69','N28','R32','G31','Y95',	
+'S09','R45','G45','Z74','M79','W06','S01','A04',	
+'A09','J18','J69','R47','E55','Z93','R02','R63',	
+'H91','W10','W01','E05','M41','R13','Z99','U80',	
+'M80','K92','I63','N20','F10','Y84','R00','J22',	
+'Z73','R79','Z91','S51','F32','M48','E83','M15',	
+'D64','L08','R11','K52','R50'
+) 
+
+:::
+
+### Falls 
+
+Our falls cohort included any patient aged 65 years or older that had an emergency admission and a primary diagnosis indicating a fall (expliticly or implicitly).
+
+::: {.callout-caution collapse="true"}
+## Expand To view ICD10 falls diagnosis codes:
+
+**Explicit**: 
+Spell_Primary_Diagnosis LIKE 'W[01][0-9]%'
+
+**Implicit - fractures**: 
+     (
+          Spell_Primary_Diagnosis LIKE 'M48[45]%'
+        OR
+          Spell_Primary_Diagnosis LIKE 'M80[0-589]%'
+        OR
+          Spell_Primary_Diagnosis LIKE 'S22[01]%'
+        OR
+          Spell_Primary_Diagnosis LIKE 'S32[0-47]%'
+        OR
+          Spell_Primary_Diagnosis LIKE 'S42[234]%'
+        OR
+          Spell_Primary_Diagnosis LIKE 'S52%'
+        OR
+          Spell_Primary_Diagnosis LIKE 'S620%'
+        OR
+          Spell_Primary_Diagnosis LIKE 'S72[0-48]%'
+        OR
+          Spell_Primary_Diagnosis LIKE 'T08X%'
+      ) 
+	  AND
+	  Spell_Primary_Diagnosis NOT LIKE '[VWXY]%'
+	  
+**Implicit - Tendency to fall**: 
+Spell_Primary_Diagnosis LIKE 'R296%'
+:::
+
+
+### End of life
+
+End of life spells were identified by filtering admissions on Dischare_Method = 4 (Outcome - Patient died. Details  [here](https://www.datadictionary.nhs.uk/data_elements/discharge_method_code__hospital_provider_spell_.html)) where the length of stay (Der_Spell_LoS) was less than 14 days and no procedure was undertaken (Der_Procedure_All IS NULL). 
+
+
 
 :::
 
@@ -931,7 +1048,6 @@ create_dt(read_procedures_list("eol"))
 :::
 
 <hr style="border-top: 2px solid #f9bf07">
-
 
 # Size and describe
 
@@ -1452,7 +1568,12 @@ While some ICB's display sustained reductions in mitigable admissions:
 -   West Yorkshire and
 -   Lincolnshire.
 
-Others show significant growth in activity: - Devon, - Staffordshire & Stoke-on-Trent and - South Yorkshire for example.
+Others show significant growth in activity: 
+
+-   Devon,
+-   Staffordshire & Stoke-on-Trent and
+-   South Yorkshire for example
+
 
 Are boundary changes impactful here?
 
@@ -1608,7 +1729,64 @@ adjusted_rate_sub_cohorts |>
        subtitle = "Age and sex adjusted rate per 1,000 population | SUS admissions 2023")
 ```
 
+Or we can compare cohort activity by ICB using an average Length of Stay measure:
+
+```{r}
+avg_los_icb_cohort %>% 
+  filter(icb_name_short != "NULL") %>% 
+  mutate(emergency_elderly_avg_los = as.numeric(emergency_elderly_avg_los),
+         falls_exp_avg_los = as.numeric(falls_exp_avg_los),
+         falls_imp_frac_avg_los = as.numeric(falls_imp_frac_avg_los),
+         falls_imp_tend_avg_los = as.numeric(falls_imp_tend_avg_los),
+         eol_avg_los = as.numeric(eol_avg_los)
+         ) %>% 
+  mutate(icb_name_clean = str_sub(icb_name_short, 10,100)) |> 
+  mutate(icb_name_clean = str_remove_all(icb_name_clean, " ICB"))|>
+  mutate(icb_name_clean = fct_reorder(icb_name_clean, emergency_elderly_avg_los)) |>
+  select(-icb_name_short) %>% 
+  pivot_longer(-icb_name_clean) %>% 
+  group_by(name) %>% 
+  mutate(quintile = 
+           case_when(value >= quantile(value, 0.8, na.rm = TRUE)~ "5",
+                     value < quantile(value, 0.2, na.rm = TRUE)~ "1",
+                     TRUE ~ "2-4")) %>% 
+  mutate(facet = "") |>
+  mutate(name = 
+           case_when(
+             name == "emergency_elderly_avg_los" ~ "1. Emergency elderly",
+             name == "frail_avg_los" ~ "2. Frail",
+             name == "eol_avg_los" ~ "3. End of life",
+             name == "falls_imp_frac_avg_los" ~ "4. Falls - Implicit fracture",
+             name == "falls_imp_tend_avg_los" ~ "5. Falls - Implicit tendency",
+             name == "falls_exp_avg_los" ~ "6. Falls - Explicit"
+           )) %>% 
+  filter(name != "6. Falls - Explicit") %>% 
+  
+  ggplot(aes(y = icb_name_clean, x = value, fill = quintile)) +
+  geom_col() +
+  facet_grid(facet~str_wrap(name, 20), scales = "free_x") +
+  scale_fill_SU() +
+  scale_x_continuous(breaks = scales::pretty_breaks()) + # Ensure whole numbers on x-axis
+  theme(strip.background.x = element_rect(fill = NA, colour = "grey")) +
+  labs(x = "Average Length of Stay (days)",
+       y = "ICB",
+       fill = "Quintile:",
+       title = "Average Length of Stay by ICB and sub-cohort",
+       subtitle = "SUS admissions 2023")
+```
+
+It is important to note however, there are limitations is using length of stay as a measure by which to compare ICB's. Specifically : 
+
+-   The range in length of stay values is small across most cohorts so the distinction between quintiles is often +/- a single day in average length of stay. 
+-   The underlying data masks smaller differences in treatment length because stays are rounded to whole numbers. 
+-   Similarly, presenting average length of stay does not illustrate the range of values within ICB's that may be focused on specific populations or care types. 
+-   Finally, presenting an annual average figure must be considered alongside data quality issues that affect only part of 2023 (the data collection period in question for the above graph) - Frimley ICB for example, is shown to have significant data quality issues affecting the later half of 2023, which need to be taken into account when interpreting the above visualisation.
+
 ### Funnel plots
+
+If we revert to considering admission rates per 1,000 population by patient sub-cohort and ICB, below we have identified the ICB's that sit outside (+/-) 1 standard deviation from the mean admission rate and have plotted them according to underlying population size.
+
+For frail, emergency elderly and falls cohorts, we note that those ICB's that are demonstrating particularly low admission rates, they are often clustered in the lower left quadrant of the graph, indicating smaller populations (around 1,000,000 residents). However, the inverse is true for patients who died in hospital within 14 days of admission, where by the ICB's with higher admission rates are more likely to have smaller resident populations.
 
 ::: panel-tabset
 #### Frail
@@ -1638,9 +1816,20 @@ funnel_plot_function("D. End of life", "End of life")
 
 ### 2x2 plots
 
-:::panel-tabset
+Finally when considering variation in use of acute care, we assess ICB admission rates in our patient cohorts against other cohorts to attempt to demonstrate the trade-offs at play for the system. Click through tabs for plot description:
 
+
+
+
+
+
+
+
+
+::: panel-tabset
 #### Frail x Emergency elderly
+
+-   **Frail x Emergency elderly**: The cohorts are highly correlated (as the frail cohort is largely a subset of the emergency elderly cohort). ICB's tend to be positioned similarly on both measures - i.e. if an ICB has a high admission rate for emergency elderly, they tend to have high admission rates in the frail cohort also.
 
 ```{r}
 compare_2_2_plots("A. Frail", "B. Emergency elderly", "Frail", "Emergency elderly")
@@ -1648,11 +1837,15 @@ compare_2_2_plots("A. Frail", "B. Emergency elderly", "Frail", "Emergency elderl
 
 #### Frail x Falls
 
+-   **Frail x Falls**: There is less evidence of correlation but almost all ICB's that have admission rates below 1 standard deviation in the falls cohorts also are below 1 standard deviation for frail admissions (lower left quadrant).
+
 ```{r}
 compare_2_2_plots("A. Frail", "C. Falls", "Frail", "Falls")
 ```
 
 #### Frail x End of life
+
+-   **Frail x End of life**: There is no evidence of a link between an ICB's admission rate in end of life admissions and frail patients.
 
 ```{r}
 compare_2_2_plots("A. Frail", "D. End of life", "Frail", "End of life")
@@ -1660,11 +1853,15 @@ compare_2_2_plots("A. Frail", "D. End of life", "Frail", "End of life")
 
 #### Emergency elderly x Falls
 
+-   **Emergency elderly x Falls**: Correlation is demonstrated again when considering falls and emergency elderly however the 4 ICB's with the highest admission rates for falls are within 1 standard deviation of the mean emergency elderly admission rate and the 5 of the highest 7th emergency elderly rates are similarly closer to average for the falls cohorts.  
+
 ```{r}
 compare_2_2_plots("B. Emergency elderly", "C. Falls", "Emergency elderly", "Falls")
 ```
 
 #### Emergency elderly x End of life
+
+-   **Emergency elderly x End of life**: No evidence of correlation between end of life and emergency elderly admission rates with a number of ICB's position far from average on 1 but near the average on the other.
 
 ```{r}
 compare_2_2_plots("B. Emergency elderly", "D. End of life", "Emergency elderly", "End of life")
@@ -1672,26 +1869,24 @@ compare_2_2_plots("B. Emergency elderly", "D. End of life", "Emergency elderly",
 
 #### Falls x End of life
 
+-   **Falls x End of life**: Similarly, no evidence of correlation between end of life and falls admission rates with a number of ICB's position far from average on 1 but near the average on the other.
+
 ```{r}
 compare_2_2_plots("C. Falls", "D. End of life", "Falls", "End of life")
 ```
-
 :::
 
-
-## Variation in outcomes 
+## Variation in outcomes
 
 Furthering our assessment of variation in treatment of these mitigable patient populations, we analyse variation in selected patient outcomes; readmission and mortality.
 
-This sub-strand of our descriptive analysis aims to investigate the risk of death or subsequent readmission in patients who have had an emergency hospital admission. We apply survival analysis techniques to help us understand what factors influence the risk of death or readmission, including determining variability between ICB area. 
+This sub-strand of our descriptive analysis aims to investigate the risk of death or subsequent readmission in patients who have had an emergency hospital admission. We apply survival analysis techniques to help us understand what factors influence the risk of death or readmission, including determining variability between ICB area.
 
 Full survival analysis output found here: <https://the-strategy-unit.github.io/Community_Strategies/community_strategy_survival_analysis.html>
 
 ![Cox regression example](cox_prop_elderly_readmission.png)
 
-
 <hr style="border-top: 2px solid #f9bf07">
-
 
 # Mitigator overlap
 
@@ -1710,15 +1905,10 @@ compare_admission_rates |>
        x = "Admission rate")
 ```
 
-
 Full analysis on overlap found here: <https://the-strategy-unit.github.io/Community_Strategies/identifying_overlap_between_cohorts.html>
 
 ![Overlap Venn diagram example](overlap_venn_plot.png)
 
-
 # Contact
 
-If you have any questions or comments regarding any of the above analysis please email <strategy.unit@nhs.net> citing the NHSE Community Services Analysis.
-
-
-
+If you have any questions or comments regarding any of the above analysis please email [strategy.unit\@nhs.net](mailto:strategy.unit@nhs.net){.email} citing the NHSE Community Services Analysis.

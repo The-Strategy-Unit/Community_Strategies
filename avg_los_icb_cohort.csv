@@ -1,0 +1,44 @@
+ICB_Name_Short,frail_avg_los,emergency_elderly_avg_los,falls_exp_avg_los,falls_imp_frac_avg_los,falls_imp_tend_avg_los,eol_avg_los
+QOQ: NHS Humber And North Yorkshire ICB,8,8,NULL,15,7,3
+QKS: NHS Kent And Medway ICB,7,8,NULL,13,7,3
+QJK: NHS Devon ICB,8,8,NULL,15,9,3
+QM7: NHS Hertfordshire & West Essex ICB,7,8,NULL,13,5,4
+QXU: NHS Surrey Heartlands ICB,8,8,NULL,15,8,4
+QRL: NHS Hampshire And Isle Of Wight ICB,9,8,NULL,15,9,4
+QHL: NHS Birmingham And Solihull ICB,8,8,NULL,15,8,3
+QWE: NHS South West London ICB,10,10,NULL,17,9,4
+QF7: NHS South Yorkshire ICB,7,7,10,12,6,3
+QMM: NHS Norfolk And Waveney ICB,9,9,NULL,16,11,4
+QJG: NHS Suffolk & North East Essex ICB,8,8,NULL,15,8,4
+NULL,9,NULL,NULL,NULL,NULL,NULL
+"QOX: NHS Bath & NE S'set, S'don & W ICB",7,7,NULL,12,9,3
+QUA: NHS Black Country ICB,7,7,NULL,14,5,4
+QYG: NHS Cheshire And Merseyside ICB,10,9,NULL,19,10,4
+"QHG: NHS Beds, Luton & Milton Keynes ICB",9,9,NULL,17,10,3
+QJ2: NHS Derby And Derbyshire ICB,8,8,NULL,15,8,4
+QHM: NHS North East & North Cumbria ICB,8,8,NULL,16,9,4
+QMF: NHS North East London ICB,9,8,NULL,14,8,3
+QNQ: NHS Frimley ICB,12,12,NULL,20,11,4
+QWU: NHS Coventry And Warwickshire ICB,8,8,NULL,17,8,3
+QH8: NHS Mid And South Essex ICB,8,8,NULL,12,7,3
+QE1: NHS Lancashire & South Cumbria ICB,10,9,31,19,11,4
+QSL: NHS Somerset ICB,10,9,NULL,15,9,4
+QWO: NHS West Yorkshire ICB,10,10,NULL,19,11,4
+QJM: NHS Lincolnshire ICB,8,7,NULL,13,6,3
+QMJ: NHS North Central London ICB,10,10,NULL,14,9,4
+"QU9: NHS Bucks, Oxford & Berkshire W ICB",7,7,NULL,14,6,4
+QR1: NHS Gloucestershire ICB,12,11,NULL,18,16,4
+QT1: NHS Nott'ham & Nottinghamshire ICB,10,9,NULL,16,12,4
+"QUY: NHS Bristol, N S'set & S Gloucs ICB",7,7,NULL,13,9,3
+QOP: NHS Greater Manchester ICB,9,9,NULL,19,9,4
+QT6: NHS Cornwall & Isles Of Scilly ICB,9,9,NULL,13,11,4
+QKK: NHS South East London ICB,10,10,NULL,15,9,4
+QVV: NHS Dorset ICB,8,8,NULL,13,10,4
+QNC: NHS Staffordshire & Stoke-On-Tr ICB,6,6,NULL,14,7,4
+QGH: NHS Herefords & Worcestershire ICB,9,8,NULL,14,8,4
+QRV: NHS North West London ICB,8,8,NULL,13,6,4
+"QK1: NHS Leics, Leic'shire & Rutland ICB",8,8,NULL,14,8,3
+"QOC: NHS Shrops, Telford & Wrekin ICB",7,7,NULL,12,7,4
+QPM: NHS Northamptonshire ICB,9,9,NULL,17,9,4
+QUE: NHS Cambs & Peterborough ICB,10,10,NULL,14,9,4
+QNX: NHS Sussex ICB,9,8,NULL,16,11,3

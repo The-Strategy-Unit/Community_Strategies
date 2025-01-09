@@ -267,6 +267,187 @@ aggregate_data_eol_1_year <-
   drop_na(death_location_type) %>% 
   mutate(year  = lubridate::year(month)) 
 
+
+# Patient characteristics ----
+
+# Patchwork: age-gender and ethnicity-deprivation
+
+
+aggregate_data_elderly_emergency %>% 
+  select(age_range) %>% 
+  distinct()
+
+
+aggregate_data_elderly_emergency %>% 
+  drop_na(age_range) %>% 
+  filter(year == 2023,
+         !age_range %in% c("100-104","105-109")) %>% 
+  group_by(age_range, sex) %>% 
+  summarise(pts = sum(person_n)) |> 
+  mutate(pts_2 = 
+           case_when(sex == 1 ~ 0-pts,
+                     TRUE ~ pts)) |> 
+  mutate(sex = 
+           case_when(sex == 1 ~ "Male",
+                     TRUE ~ "Female")) %>%
+  #mutate(age_range_text = paste(age_range, "-", age_range+4)) |> 
+  
+  ggplot(aes(x = pts_2, y = age_range, fill = sex)) +
+  geom_col() +
+  geom_vline(xintercept = 0) +
+  scale_fill_SU() +
+  scale_x_continuous(labels = function(x) scales::comma(abs(x))) +
+  theme(legend.position = "bottom",
+        plot.subtitle = element_text(hjust = 0.5)
+  ) +
+  labs(x = "Patients",
+       y = "Age-range",
+       fill = "Sex:",
+       subtitle = "Age and sex distribution",
+       #subtitle = "2023"
+  )
+
+
+patchwork_function <- function(data, title_text) {
+  
+  # Plot 1
+  plot_1 <-
+    data %>% 
+    drop_na(age_range) %>% 
+    filter(year == 2023,
+           !age_range %in% c("100-104","105-109")) %>% 
+    group_by(age_range, sex) %>% 
+    summarise(pts = sum(person_n)) |> 
+    mutate(pts_2 = 
+             case_when(sex == 1 ~ 0-pts,
+                       TRUE ~ pts)) |> 
+    mutate(sex = 
+             case_when(sex == 1 ~ "Male",
+                       TRUE ~ "Female")) %>%
+    
+    ggplot(aes(x = pts_2, y = age_range, fill = sex)) +
+    geom_col() +
+    geom_vline(xintercept = 0) +
+    scale_fill_SU() +
+    scale_x_continuous(labels = function(x) scales::comma(abs(x))) +
+    theme(legend.position = "bottom",
+          plot.subtitle = element_text(hjust = 0.5)
+          ) +
+    labs(x = "Patients",
+         y = "Age-range",
+         fill = "Sex:",
+         subtitle = "Age and sex distribution",
+         )
+  
+  
+  # Plot 2
+  ethnicity_imd <-
+    data |> 
+    drop_na(age_range) %>% 
+    filter(year == 2023,
+           !age_range %in% c("100-104","105-109")) %>% 
+    mutate(ethnic_group = str_sub(ethnic_group, 1,1)) %>% 
+    left_join(ethnicity_lookup, by = c("ethnic_group" = "Code")) |> 
+    group_by(Description, imd_decile) |> 
+    summarise(person_n = sum(person_n)) |> 
+    ungroup()
+  
+  # Reshape the data for the heatmap
+  heatmap_data <- dcast(ethnicity_imd, Description  ~ imd_decile, value.var = "person_n")
+  
+  # Convert the data to a matrix
+  heatmap_matrix <- as.matrix(heatmap_data[,-1])
+  rownames(heatmap_matrix) <- heatmap_data$ethnic_group
+  
+  plot_2 <-
+    ethnicity_imd |> 
+    group_by(Description) |> 
+    drop_na(Description) |> 
+    mutate(prop = person_n/sum(person_n) * 100) |> 
+    
+    ggplot(aes(x = factor(imd_decile), y = Description, fill = prop)) +
+    geom_tile(alpha = 0.9) +
+    scale_fill_gradient(low = "#686f73", high = "#f9bf07") +
+    theme(legend.position = "bottom",
+          plot.subtitle = element_text(hjust = 0.5)
+    ) +
+    labs(x = "IMD Decile",
+         y = "Ethnic Group",
+         subtitle = "IMD distribution in patient ethnicity groups",
+         fill = "Proportion (%)"
+    ) 
+  
+  plot_1 + plot_2 +
+    plot_annotation(title = paste0("Sub-cohort demographics - ", title_text),
+                    subtitle = "Mitigable SUS admissions | 2023")
+  
+  
+}
+
+
+patchwork_function(aggregate_data_elderly_emergency, "Emergency elderly patients")
+patchwork_function(aggregate_data_frail, "Frail patients")
+patchwork_function(aggregate_data_falls, "Falls patients")
+patchwork_function(aggregate_data_eol, "End-of-life patients")
+
+patchwork_function(aggregate_data_eol_1_year, "End of life care - patients with inpatient activity within 1 year of death")
+patchwork_function(aggregate_data_amb_acute, "Ambulatory care - acute patients")
+patchwork_function(aggregate_data_amb_chronic, "Ambulatory care - chronic patients")
+patchwork_function(aggregate_data_amb_vacc_prev, "Ambulatory care - vaccine preventable patients")
+
+
+# Top diagnoses by cohort
+read_diagnosis_list <- function(cohort) {
+  
+  data <- 
+    read_csv(paste0("top_diagnoses/", cohort, ".csv")) |> 
+    clean_names() |> 
+    select(4,2) |> 
+    rename(Admissions = 2) |> 
+    arrange(desc(Admissions)) |> 
+    mutate(Proportion = round(Admissions/sum(Admissions)*100, 2)) |> 
+    rename(`Primary diagnosis` = icd10_l4_desc) |> 
+    head(10) |> 
+    mutate(Admissions = scales::comma(Admissions))
+  
+  data
+}
+
+read_diagnosis_list("frail") 
+read_diagnosis_list("emergency_elderly")
+read_diagnosis_list("falls")
+read_diagnosis_list("eol")
+read_diagnosis_list("amb_chronic")
+read_diagnosis_list("amb_acute")
+read_diagnosis_list("amb_vacc_prev")
+read_diagnosis_list("eol_broad")
+
+
+# Top diagnoses by cohort
+read_procedures_list <- function(cohort) {
+  
+  data <- 
+    read_csv(paste0("top_procedures/", cohort, ".csv")) |> 
+    clean_names() |> 
+    select(4,2) |> 
+    rename(Admissions = 2) |> 
+    arrange(desc(Admissions)) |> 
+    mutate(Proportion = round(Admissions/sum(Admissions)*100, 2)) |> 
+    rename(`Primary procedure` = opcs_l4_desc) |> 
+    head(10)
+  
+  data
+}
+
+read_procedures_list("frail")
+read_procedures_list("emergency_elderly")
+read_procedures_list("falls")
+read_procedures_list("eol")
+read_procedures_list("amb_chronic")
+read_procedures_list("amb_acute")
+read_procedures_list("amb_vacc_prev")
+read_procedures_list("eol_broad")
+
 # Plot aggregate activity ----
 aggregate_data_core_cohorts %>%  
   group_by(month) %>% 
@@ -310,7 +491,7 @@ aggregate_data_core_cohorts %>%
 
 
 
-
+# Annual table
 aggregate_data_core_cohorts %>%  
   mutate(year  = lubridate::year(month)) %>% 
   group_by(year) %>% 
@@ -703,8 +884,8 @@ aggregate_data |>
                     "-",
                     str_sub(der_activity_month,5,6),
                     "-01")
-           )
-  ) |> 
+             )
+         ) |> 
   
   ggplot(aes(x = month, y = prop)) +
   #geom_point() +
@@ -822,12 +1003,38 @@ icb_pop_2023_sex_age_range <-
   mutate(sex = as.numeric(ifelse(grepl("^m", age_sex), "1", "2")),
          age = as.numeric(sub("^[mf]", "", age_sex))) %>%
   mutate(age_range = 
-           cut(age, 
-               breaks = seq(0, 90, by = 5), 
-               right = FALSE, 
-               labels = paste(seq(0, 85, by = 5))
-           )
-  ) %>% 
+           case_when(
+             age >= 0 & age <= 4 ~ "0-4",
+             age >= 5 & age <= 9 ~ "5-9",
+             age >= 10 & age <= 14 ~ "10-14",
+             age >= 15 & age <= 19 ~ "15-19",
+             age >= 20 & age <= 24 ~ "20-24",
+             age >= 25 & age <= 29 ~ "25-29",
+             age >= 30 & age <= 34 ~ "30-34",
+             age >= 35 & age <= 39 ~ "35-39",
+             age >= 40 & age <= 44 ~ "40-44",
+             age >= 45 & age <= 49 ~ "45-49",
+             age >= 50 & age <= 54 ~ "50-54",
+             age >= 55 & age <= 59 ~ "55-59",
+             age >= 60 & age <= 64 ~ "60-64",
+             age >= 65 & age <= 69 ~ "65-69",
+             age >= 70 & age <= 74 ~ "70-74",
+             age >= 75 & age <= 79 ~ "75-79",
+             age >= 80 & age <= 84 ~ "80-84",
+             age >= 85 & age <= 89 ~ "85-89",
+             age >= 90 & age <= 94 ~ "90-94",
+             age >= 95 & age <= 99 ~ "95-99",
+             age >= 100 & age <= 104 ~ "100-104",
+             age >= 105 ~ "105+",
+             TRUE ~ NA
+             )) %>% 
+  #mutate(age_range = 
+  #         cut(age, 
+  #             breaks = seq(0, 90, by = 5), 
+  #             right = FALSE, 
+  #             labels = paste(seq(0, 85, by = 5))
+  #             )
+  #       ) %>% 
   group_by(icb_2023_code, icb_2023_name, sex, age_range) %>% 
   summarise(population = sum(population, na.rm= TRUE)) %>%
   ungroup() %>% 
@@ -890,6 +1097,7 @@ standardisation_function <- function(data_input) {
   
 }
 
+
 adjusted_rate_sub_cohorts <-
   standardisation_function(aggregate_data) %>% 
   mutate(id = "rate") %>% 
@@ -948,6 +1156,7 @@ frail_map <- plot_function("frail_rate", "A. Frail")
 falls_map <- plot_function("falls_rate", "C. Falls")
 eol_map <- plot_function("eol_rate", "D. EoL")
 elderly_emergency_map <- plot_function("elderly_emergency_rate", "B. Elderly emergency")
+
 
 # Plot patchwork map
 frail_map +
@@ -1025,12 +1234,54 @@ adjusted_rate_sub_cohorts |>
        subtitle = "Age and sex adjusted rate per 1,000 population | SUS admissions 2023")
 
 # Plot above by avg_los 
+avg_los_icb_cohort <- 
+  read_csv("avg_los_icb_cohort.csv") %>% 
+  clean_names()
 
-aggregate_data_frail
+
+avg_los_icb_cohort %>% 
+  filter(icb_name_short != "NULL") %>% 
+  mutate(emergency_elderly_avg_los = as.numeric(emergency_elderly_avg_los),
+         falls_exp_avg_los = as.numeric(falls_exp_avg_los),
+         falls_imp_frac_avg_los = as.numeric(falls_imp_frac_avg_los),
+         falls_imp_tend_avg_los = as.numeric(falls_imp_tend_avg_los),
+         eol_avg_los = as.numeric(eol_avg_los)
+         ) %>% 
+  mutate(icb_name_clean = str_sub(icb_name_short, 10,100)) |> 
+  mutate(icb_name_clean = str_remove_all(icb_name_clean, " ICB"))|>
+  mutate(icb_name_clean = fct_reorder(icb_name_clean, emergency_elderly_avg_los)) |>
+  select(-icb_name_short) %>% 
+  pivot_longer(-icb_name_clean) %>% 
+  group_by(name) %>% 
+  mutate(quintile = 
+           case_when(value >= quantile(value, 0.8, na.rm = TRUE)~ "5",
+                     value < quantile(value, 0.2, na.rm = TRUE)~ "1",
+                     TRUE ~ "2-4")) %>% 
+  mutate(facet = "") |>
+  mutate(name = 
+           case_when(
+             name == "emergency_elderly_avg_los" ~ "1. Emergency elderly",
+             name == "frail_avg_los" ~ "2. Frail",
+             name == "eol_avg_los" ~ "3. End of life",
+             name == "falls_imp_frac_avg_los" ~ "4. Falls - Implicit fracture",
+             name == "falls_imp_tend_avg_los" ~ "5. Falls - Implicit tendency",
+             name == "falls_exp_avg_los" ~ "6. Falls - Explicit"
+           )) %>% 
+  filter(name != "6. Falls - Explicit") %>% 
+  
+  ggplot(aes(y = icb_name_clean, x = value, fill = quintile)) +
+  geom_col() +
+  facet_grid(facet~str_wrap(name, 20), scales = "free_x") +
+  scale_fill_SU() +
+  scale_x_continuous(breaks = scales::pretty_breaks()) + # Ensure whole numbers on x-axis
+  theme(strip.background.x = element_rect(fill = NA, colour = "grey")) +
+  labs(x = "Average Length of Stay (days)",
+       y = "ICB",
+       fill = "Quintile:",
+       title = "Average Length of Stay by ICB and sub-cohort",
+       subtitle = "SUS admissions 2023")
 
 
-
-aggregate_data
 
 ## Funnel plots ----
 
@@ -1332,306 +1583,5 @@ ggplot(summary_data, aes(x = flag_frail, y = flag_eol, fill = count)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-# Patient characteristics ----
 
-## Age and gender structure
-
-aggregate_data_frail %>% 
-  filter(year == 2023,
-         age_range < 100) %>% 
-  group_by(age_range, sex) %>% 
-  summarise(pts = sum(person_n)) %>%
-  mutate(prop = pts/sum(pts)*100) %>% 
-  select(-pts) %>% 
-  pivot_wider(id_cols = age_range,
-              names_from = sex, 
-              values_from = prop) %>%
-  pivot_longer(-age_range) %>%
-  mutate(name = 
-           case_when(name == 1 ~ "Male",
-                     TRUE ~ "Female")) %>%
-  mutate(age_range_text = paste(age_range, "-", age_range+4)) %>% 
-  
-  ggplot(aes(x = value, y = age_range_text, fill = name)) +
-  geom_col(position = "stack") +
-  geom_vline(xintercept = 50) +
-  scale_fill_SU() +
-  labs(x = "Percent",
-       y = "Age range",
-       fill = "Sex",
-       title = "Gender distribution in frail patient cohort by age range",
-       subtitle = "SUS 2023")
-
-# Gender distribution structure by ICB
-aggregate_data_frail %>% 
-  filter(year == 2023,
-         age_range < 100) %>% 
-  group_by(icb_name_short, sex) %>% 
-  summarise(pts = sum(person_n)) %>%
-  mutate(prop = pts/sum(pts)*100) %>% 
-  select(-pts) %>% 
-  pivot_wider(id_cols = icb_name_short,
-              names_from = sex, 
-              values_from = prop) %>%
-  arrange(`2`) |> 
-  ungroup() |> 
-  mutate(rn = row_number()) |> 
-  pivot_longer(-c(icb_name_short, rn)) %>%
-  mutate(name = 
-           case_when(name == 1 ~ "Male",
-                     TRUE ~ "Female")) %>%
-  drop_na(icb_name_short) %>%
-  mutate(icb_name_clean = str_sub(icb_name_short, 10,100)) |> 
-  mutate(icb_name_clean = str_remove_all(icb_name_clean, " ICB"))|> 
-  
-  ggplot(aes(x = value, y = reorder(icb_name_clean, rn), fill = name)) +
-  geom_col(position = "stack") +
-  geom_vline(xintercept = 50) +
-  scale_fill_SU() +
-  labs(x = "Percent",
-       y = "ICB",
-       fill = "Sex",
-       title = "Gender distribution in frail patient cohort by ICB",
-       subtitle = "SUS 2023")
-
-# Age structure by ICB
-age_icb_frail <-
-  aggregate_data_frail %>% 
-  filter(year == 2023,
-         age_range < 100) %>% 
-  group_by(icb_name_short, age_range) %>% 
-  summarise(pts = sum(person_n)) %>%
-  mutate(prop = pts/sum(pts)*100) %>% 
-  select(-pts) %>% 
-  pivot_wider(id_cols = icb_name_short,
-              names_from = age_range, 
-              values_from = prop) %>%
-  pivot_longer(-icb_name_short) %>%
-  drop_na(icb_name_short) %>%
-  mutate(icb_name_clean = str_sub(icb_name_short, 10,100)) |> 
-  mutate(icb_name_clean = str_remove_all(icb_name_clean, " ICB"))
-
-
-age_icb_frail |> 
-  left_join(age_icb_frail|>
-              ungroup() |>
-              filter(name == 90) |>
-              arrange(value) |>
-              mutate(rn = row_number()) |> 
-              select(icb_name_clean, rn),
-            by = "icb_name_clean"
-            ) |> 
-  mutate(name = factor(name, levels = c(95, 90, 85, 80, 75, 70))) |> 
-  
-  ggplot(aes(x = value, y = reorder(icb_name_clean, rn), fill = name)) +
-  geom_col(position = "stack") +
-  geom_vline(xintercept = 50) +
-  scale_fill_SU() +
-  #guides(fill = guide_legend(reverse = TRUE)) +
-  labs(x = "Percent",
-       y = "ICB",
-       fill = "Age-range",
-       title = "Age range distribution in frail patient cohort by ICB",
-       subtitle = "SUS 2023")
-
-
-## Ethnicity
-aggregate_data_frail %>% 
-  filter(year == 2023,
-         age_range < 100) %>% 
-  mutate(ethnic_group = str_sub(ethnic_group, 1,1)) %>% 
-  group_by(ethnic_group, sex) %>% 
-  summarise(pts = sum(person_n)) %>%
-  mutate(prop = pts/sum(pts)*100) %>% 
-  #select(-pts) |> 
-  left_join(ethnicity_lookup, by = c("ethnic_group" = "Code")) %>% 
-  drop_na(Description) %>% 
-  select(-pts, -ethnic_group) %>% 
-  pivot_wider(id_cols = Description,
-              names_from = sex, 
-              values_from = prop) %>%
-  pivot_longer(-Description) %>%
-  mutate(name = 
-           case_when(name == 1 ~ "Male",
-                     TRUE ~ "Female")) %>%
-  #mutate(age_range_text = paste(age_range, "-", age_range+4)) %>% 
-  
-  ggplot(aes(x = value, y = Description, fill = name)) +
-  geom_col(position = "stack") +
-  geom_vline(xintercept = 50) +
-  scale_fill_SU() +
-  labs(x = "Percent",
-       y = "Ethnicity",
-       fill = "Sex",
-       title = "Gender distribution in frail patient cohort by ethnicity",
-       subtitle = "SUS 2023")
-
-
-## Ethnicity and age
-aggregate_data_frail %>% 
-  filter(year == 2023,
-         age_range < 100) %>% 
-  mutate(ethnic_group = str_sub(ethnic_group, 1,1)) %>% 
-  group_by(ethnic_group, age_range) %>% 
-  summarise(spells = sum(spells)) %>% 
-  left_join(ethnicity_lookup, by = c("ethnic_group" = "Code")) %>% 
-  mutate(prop = spells/sum(spells)*100) %>% 
-  ungroup() %>% 
-  drop_na(Description) %>% 
-  select(-spells, -ethnic_group) %>%
-  mutate(age_range = paste(age_range, "-", age_range+4)) %>%
-  pivot_wider(id_cols = Description,
-              names_from = age_range, 
-              values_from = prop) %>%
-  pivot_longer(-Description) %>%
-  #mutate(name = case_when(name == 1 ~ "Male", TRUE ~ "Female")) %>%
-  
-  ggplot(aes(x = value, y = Description, fill = name)) +
-  geom_col(position = "stack") +
-  scale_fill_SU() +
-  labs(x = "Percent",
-       y = "Ethnicity",
-       fill = "Age range",
-       title = "Age distribution in frail patient cohort by ethnicity",
-       subtitle = "SUS 2023")
-
-
-# Patchwork: age-gender and ethnicity-deprivation
-
-patchwork_function <- function(data, title_text) {
-  
-  # Plot 1
-  plot_1 <-
-    data %>% 
-    filter(year == 2023,
-           age_range < 100) %>% 
-    group_by(age_range, sex) %>% 
-    summarise(pts = sum(person_n)) |> 
-    mutate(pts_2 = 
-             case_when(sex == 1 ~ 0-pts,
-                       TRUE ~ pts)) |> 
-    mutate(sex = 
-             case_when(sex == 1 ~ "Male",
-                       TRUE ~ "Female")) %>%
-    mutate(age_range_text = paste(age_range, "-", age_range+4)) |> 
-    
-    ggplot(aes(x = pts_2, y = age_range_text, fill = sex)) +
-    geom_col() +
-    geom_vline(xintercept = 0) +
-    scale_fill_SU() +
-    scale_x_continuous(labels = function(x) scales::comma(abs(x))) +
-    theme(legend.position = "bottom",
-          plot.subtitle = element_text(hjust = 0.5)
-          ) +
-    labs(x = "Patients",
-         y = "Age-range",
-         fill = "Sex:",
-         subtitle = "Age and sex distribution",
-         #subtitle = "2023"
-         )
-  
-  
-  # Plot 2
-  ethnicity_imd <-
-    data |> 
-    filter(year == 2023) |>
-    mutate(ethnic_group = str_sub(ethnic_group, 1,1)) %>% 
-    left_join(ethnicity_lookup, by = c("ethnic_group" = "Code")) |> 
-    group_by(Description, imd_decile) |> 
-    summarise(person_n = sum(person_n)) |> 
-    ungroup()
-  
-  # Reshape the data for the heatmap
-  heatmap_data <- dcast(ethnicity_imd, Description  ~ imd_decile, value.var = "person_n")
-  
-  # Convert the data to a matrix
-  heatmap_matrix <- as.matrix(heatmap_data[,-1])
-  rownames(heatmap_matrix) <- heatmap_data$ethnic_group
-  
-  plot_2 <-
-    ethnicity_imd |> 
-    group_by(Description) |> 
-    drop_na(Description) |> 
-    mutate(prop = person_n/sum(person_n) * 100) |> 
-    
-    ggplot(aes(x = factor(imd_decile), y = Description, fill = prop)) +
-    geom_tile(alpha = 0.9) +
-    scale_fill_gradient(low = "#686f73", high = "#f9bf07") +
-    theme(legend.position = "bottom",
-          plot.subtitle = element_text(hjust = 0.5)
-          ) +
-    labs(x = "IMD Decile",
-         y = "Ethnic Group",
-         subtitle = "IMD distribution in patient ethnicity groups",
-         #subtitle = "Frail cohort 2023",
-         fill = "Proportion (%)"
-    ) 
-  
-  plot_1 + plot_2 +
-    plot_annotation(title = paste0("Sub-cohort demographics - ", title_text),
-                    subtitle = "Mitigable SUS admissions | 2023")
-  
-  
-}
-
-
-patchwork_function(aggregate_data_elderly_emergency, "Emergency elderly patients")
-patchwork_function(aggregate_data_frail, "Frail patients")
-patchwork_function(aggregate_data_falls, "Falls patients")
-patchwork_function(aggregate_data_eol, "End-of-life patients")
-
-
-# Top diagnoses by cohort
-
-read_diagnosis_list <- function(cohort) {
-
-  data <- 
-    read_csv(paste0("top_diagnoses/", cohort, ".csv")) |> 
-    clean_names() |> 
-    select(4,2) |> 
-    rename(Admissions = 2) |> 
-    arrange(desc(Admissions)) |> 
-    mutate(Proportion = round(Admissions/sum(Admissions)*100, 2)) |> 
-    rename(`Primary diagnosis` = icd10_l4_desc) |> 
-    head(10) |> 
-    mutate(Admissions = scales::comma(Admissions))
-  
-  data
-}
-
-read_diagnosis_list("frail") 
-read_diagnosis_list("emergency_elderly")
-read_diagnosis_list("falls")
-read_diagnosis_list("eol")
-read_diagnosis_list("amb_chronic")
-read_diagnosis_list("amb_acute")
-read_diagnosis_list("amb_vacc_prev")
-read_diagnosis_list("eol_broad")
-
-
-# Top diagnoses by cohort
-
-read_procedures_list <- function(cohort) {
-  
-  data <- 
-    read_csv(paste0("top_procedures/", cohort, ".csv")) |> 
-    clean_names() |> 
-    select(4,2) |> 
-    rename(Admissions = 2) |> 
-    arrange(desc(Admissions)) |> 
-    mutate(Proportion = round(Admissions/sum(Admissions)*100, 2)) |> 
-    rename(`Primary procedure` = opcs_l4_desc) |> 
-    head(10)
-  
-  data
-}
-
-read_procedures_list("frail")
-read_procedures_list("emergency_elderly")
-read_procedures_list("falls")
-read_procedures_list("eol")
-read_procedures_list("amb_chronic")
-read_procedures_list("amb_acute")
-read_procedures_list("amb_vacc_prev")
-read_procedures_list("eol_broad")
 

@@ -19,8 +19,8 @@ tar_source()
 list(
   
   # Data formatting
-  tar_target(
-    survival_data,
+ tar_target(
+   survival_data,
     read_Rdata_file("Z:/Strategic Analytics/Projects 2024/NHSE Community Strategy/survival_data.RData")),
   
   tar_target(
@@ -30,7 +30,7 @@ list(
   tar_target(
     survival_data_2223_survived_1yr,
     formatting_survival_data_2223(survival_data)|>
-      filter(died_before_readmission_1yr!=1)),
+     filter(died_before_readmission_1yr!=1)),
   
   tar_target(
     mean_median_admissions,
@@ -74,7 +74,7 @@ list(
   
   tar_target(
     spells_beddays_data,
-    Formatting_spells_beddays_data("Z:/Strategic Analytics/Projects 2024/NHSE Community Strategy/cohort_overlap_data_spells_beddays.RData")  ),
+    Formatting_spells_beddays_data("Z:/Strategic Analytics/Projects 2024/NHSE Community Strategy/cohort_overlap_data_spells.RData")  ),
   
   # Matrix of overlap
   tar_target(

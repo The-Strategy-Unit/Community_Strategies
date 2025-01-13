@@ -43,7 +43,7 @@ table_of_overlap_values<-function(data){
   
 upset_plot_data<-data
 
-cohorts = colnames(upset_plot_data)[7:14]
+cohorts = colnames(upset_plot_data)[7:11]
 
 upset_plot_data[cohorts] = upset_plot_data[cohorts] == 1
 
@@ -54,6 +54,7 @@ overlap_data<-overlap_data$presence|>
                               age_range=="65-69"| age_range=="70-74"~ "65-74 yrs",
                               age_range=="75-79"| age_range=="80-84"|
                                 age_range=="85-89"| age_range=="90+"~ "75+ yrs"))|>
+  mutate(binary_cohort=stringr::str_extract(binary_cohort, "^.{5}"))|>
   group_by(intersection, age_groups, sex, group, binary_cohort)|>
   summarise(`Number of patients`=n())|>
   mutate(binary=ifelse(!is.na(`Number of patients`),1,0))|>
@@ -177,7 +178,7 @@ Plot_venn_diagram<-function(data, cohort1, cohort2, cohort3, cohort4, title){
     
   }
   
-  ggVennDiagram(venn_data, label_alpha = 0, label_size = 3.4) +
+  ggVennDiagram(venn_data, label_alpha = 0, label_size = 3.4, label = "percent") +
     scale_fill_distiller(palette = "Spectral") +
     labs(title = str_wrap(title, 65))+
     scale_x_continuous(expand=c(0.1,0.1))+
@@ -199,13 +200,13 @@ Plot_venn_diagram_5groups<-function(data, cohort1, cohort2, cohort3, cohort4, co
     
   
   
-  ggVennDiagram(venn_data, label_alpha = 0, label_size = 3.2,
+  ggVennDiagram(venn_data, label_alpha = 0, label_size = 3.4,label = "percent",
                 color =  c("group1"="#343739", "group2"= "#686f73" ,"group3"="#9d928a"  ,"group4"="black","group5"="#b2b7b9"),
                 set_color = c("group1"="#343739" , "group2"= "#686f73" ,"group3"="#9d928a"  ,"group4"="black","group5"="#b2b7b9")) +
     scale_fill_distiller(palette = "Spectral") +
     labs(title = str_wrap(title, 75))+
     scale_x_continuous(expand=c(0.1,0.1))+
-    theme(legend.position=c(0.85,0.2),
+    theme(legend.position="none",
           plot.title=element_text(face="bold", hjust = 0.5))
 }
 

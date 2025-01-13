@@ -10,7 +10,7 @@ SELECT
 	a.APCS_Ident,
 	a.Der_Financial_Year,
 	a.Sex,
-	FLOOR((a.Der_Age_at_CDS_Activity_Date - 1) / 5) * 5 AS age_range,
+	a.Der_Age_at_CDS_Activity_Date,
 	a.Ethnic_Group,
 	c.IMD_Decile,
 	b.ICB_Name_Short,

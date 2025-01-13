@@ -19,7 +19,7 @@ SELECT
     a.Der_Pseudo_NHS_Number,
 	a.Der_Financial_Year,
 	a.Sex,
-	FLOOR((a.Der_Age_at_CDS_Activity_Date - 1) / 5) * 5 AS age_range,
+	a.Der_Age_at_CDS_Activity_Date,
 	a.Ethnic_Group,
 	c.IMD_Decile,
 	DATEDIFF(day, a.Discharge_Date, a.next_admission_date) as time_to_readmission,

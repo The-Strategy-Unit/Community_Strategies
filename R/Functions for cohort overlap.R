@@ -43,7 +43,7 @@ table_of_overlap_values<-function(data){
   
 upset_plot_data<-data
 
-cohorts = colnames(upset_plot_data)[7:14]
+cohorts = colnames(upset_plot_data)[7:11]
 
 upset_plot_data[cohorts] = upset_plot_data[cohorts] == 1
 
@@ -54,6 +54,7 @@ overlap_data<-overlap_data$presence|>
                               age_range=="65-69"| age_range=="70-74"~ "65-74 yrs",
                               age_range=="75-79"| age_range=="80-84"|
                                 age_range=="85-89"| age_range=="90+"~ "75+ yrs"))|>
+  mutate(binary_cohort=stringr::str_extract(binary_cohort, "^.{5}"))|>
   group_by(intersection, age_groups, sex, group, binary_cohort)|>
   summarise(`Number of patients`=n())|>
   mutate(binary=ifelse(!is.na(`Number of patients`),1,0))|>
@@ -91,6 +92,7 @@ plotting_barchart_summary_of_overlaps<-function(data, group, title){
   total_number<-sum(data[[group_name]])
 
 cohort_overlap_data_2324|>
+  select(-`ACSC Acute`,-`ACSC Chronic`,-`ACSC Vaccine Preventable`  )|>
   filter({{group}}==1)|>
   summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE)))|>
   gather(key=cohort, value=number)|>
@@ -114,7 +116,42 @@ cohort_overlap_data_2324|>
   scale_y_continuous(limits=c(0, total_number*1.2), expand=c(0,0))
 
 
-   }
+}
+
+# Summary barchart of percentage of overlap with different groups
+
+plotting_barchart_summary_of_overlaps_individual_acsc<-function(data, group, title){
+  
+  group_name<-deparse(substitute(group))
+  
+  total_number<-sum(data[[group_name]])
+  
+  cohort_overlap_data_2324|>
+    filter({{group}}==1)|>
+    summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE)))|>
+    gather(key=cohort, value=number)|>
+    mutate(total=total_number)|>
+    mutate(percentage=round(((number/total))*100,1))|>
+    arrange(desc(percentage))|>
+    mutate(cohort=factor(cohort, unique(cohort)))|>
+    ggplot(aes(x=cohort, y=number))+
+    geom_bar(stat="identity")+
+    su_theme()+
+    theme(axis.text=element_text(size=10.5),
+          axis.title.y=element_text(size=14))+
+    labs(y="Number of Patients",
+         x=NULL,
+         title=title)+ 
+    scale_x_discrete(
+      labels = function(x) str_wrap(x, width = 7),
+      drop = FALSE
+    )+
+    geom_text(aes(label=paste0(number, ' \n(',percentage, '%)'), vjust=-0.2))+
+    scale_y_continuous(limits=c(0, total_number*1.2), expand=c(0,0))
+  
+  
+}
+
 
 # Function to general venn diagrams
 
@@ -141,7 +178,7 @@ Plot_venn_diagram<-function(data, cohort1, cohort2, cohort3, cohort4, title){
     
   }
   
-  ggVennDiagram(venn_data, label_alpha = 0, label_size = 3.4) +
+  ggVennDiagram(venn_data, label_alpha = 0, label_size = 3.4, label = "percent") +
     scale_fill_distiller(palette = "Spectral") +
     labs(title = str_wrap(title, 65))+
     scale_x_continuous(expand=c(0.1,0.1))+
@@ -163,13 +200,13 @@ Plot_venn_diagram_5groups<-function(data, cohort1, cohort2, cohort3, cohort4, co
     
   
   
-  ggVennDiagram(venn_data, label_alpha = 0, label_size = 3.2,
+  ggVennDiagram(venn_data, label_alpha = 0, label_size = 3.4,label = "percent",
                 color =  c("group1"="#343739", "group2"= "#686f73" ,"group3"="#9d928a"  ,"group4"="black","group5"="#b2b7b9"),
                 set_color = c("group1"="#343739" , "group2"= "#686f73" ,"group3"="#9d928a"  ,"group4"="black","group5"="#b2b7b9")) +
     scale_fill_distiller(palette = "Spectral") +
     labs(title = str_wrap(title, 75))+
     scale_x_continuous(expand=c(0.1,0.1))+
-    theme(legend.position=c(0.85,0.2),
+    theme(legend.position="none",
           plot.title=element_text(face="bold", hjust = 0.5))
 }
 

@@ -156,7 +156,7 @@ Three patient cohorts are included within this analysis:
 
 The **End of life** cohort are not included as by definition they die during their hospital admission.
 
-Survival analysis has been conducted using data from 2023/23 for
+Survival analysis has been conducted using data from 2022/23 for
 
 -   Time to death (mortality)
 

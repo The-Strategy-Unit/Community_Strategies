@@ -166,7 +166,7 @@ The patient cohorts included within this analysis are:
 
 **End of life (EOL)**: those who die within 14 days of an admission. These patients die in hospital and there are no procedures carried out and no indication that the patient experienced any trauma. (NHP definition)
 
-**Expanded End of Life**: those with at least one hospital admission in the the year prior to their death. 
+**Expanded End of Life**: those with at least one hospital admission in the the year prior to their death.
 
 **Ambulatory Care Sensitive Conditions (ACSC)**; those with admissions that could potentially be avoided with effective management and treatment such as improved primary or community health care services such as screening, vaccination, immunisation and health monitoring.
 
@@ -207,7 +207,7 @@ gather(key=Cohort, value=`Number of people`)|>
 
 ## Table of numbers of patients in each cohort/overlap
 
-Spells and beddays are allocated to cohorts based on each admission. For patients they are included in all the cohorts for which they had an admission during the 2023/24 year. Therefore if a patient had one admission included within the cohort for fall and one admission included in the elderly emergency cohort, they would be recorded as being in the fall-elderly emergency overlap cohort, but their spells and beddays for these admissions would be recorded under falls only and elderly emergency only. This is why there may be a number of patients with a particular overlap of cohorts but there are no/few spells/beddays associated with this overlap of cohorts.   
+Spells and beddays are allocated to cohorts based on each admission. For patients they are included in all the cohorts for which they had an admission during the 2023/24 year. Therefore if a patient had one admission included within the cohort for fall and one admission included in the elderly emergency cohort, they would be recorded as being in the fall-elderly emergency overlap cohort, but their spells and beddays for these admissions would be recorded under falls only and elderly emergency only. This is why there may be a number of patients with a particular overlap of cohorts but there are no/few spells/beddays associated with this overlap of cohorts.
 
 Where the number of patients, spells or beddays is less than 10 the numbers have been suppressed.
 
@@ -344,7 +344,7 @@ ComplexUpset::upset(upset_plot_data, cohorts, name='Cohorts',
 
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot_individual_acsc(cohort_overlap_data_2324, 17, 330000)
+plot_upset_plot_individual_acsc(cohort_overlap_data_2324, 17, 360000)
 
 ```
 :::
@@ -478,8 +478,9 @@ plotting_barchart_summary_of_overlaps_individual_acsc(cohort_overlap_data_2324, 
 
 In those under 75 years the majority are within either frail, ACSC cohort or expanded EOL cohorts, with relatively little overlap between the cohorts. In those over 75 there is more overlap between cohorts, the majority are in the elderly emergency cohort with considerable overlap with the frail and expanded EOL cohorts.
 
-:::panel-tabset
+::: panel-tabset
 #### Venn diagrams
+
 ::: columns
 ::: {.column width="50%"}
 ```{r, fig.width=8, fig.height=8}
@@ -564,8 +565,7 @@ plot_upset_plot(cohort_overlap_data_2324|>filter(age_range!="<60" & age_range!="
 
 Generally the distribution and patterns of overlap are similar between men and women. However, male patients are more likely to be in the solely frail cohort, whereas female patients are less likely to be in the solely frail cohort, but more likely to be in the frail, elderly emergency and falls cohorts.
 
-:::panel-tabset
-
+::: panel-tabset
 #### Venn diagrams
 
 ::: columns
@@ -646,8 +646,8 @@ plot_upset_plot(cohort_overlap_data_2324|>filter(sex=="female"),15, 230000)
 Those in the most deprived areas (IMD decile 1 & 2) are most likely to be in the acute or chronic ambulatory care sensitive cohorts, while those in the most affluent areas (IMD decile 9 & 10) are more likely to be in the elderly emergency cohort.
 
 ::: panel-tabset
-
 #### Venn diagrams
+
 ::: columns
 ::: {.column width="50%"}
 ```{r, fig.width=8, fig.height=8}
@@ -730,6 +730,7 @@ Those who are White British were most commonly in the elderly emergency cohort, 
 
 ::: panel-tabset
 #### Venn diagrams
+
 ::: columns
 ::: {.column width="50%"}
 ```{r, fig.width=8, fig.height=8}
@@ -800,7 +801,7 @@ Plot_venn_diagram_5groups(cohort_overlap_data_2324|>filter(ethnicity=="Other"),
 
 ```{r, fig.width=10, fig.height=6}
 
-plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="White British"),15, 280000)
+plot_upset_plot(cohort_overlap_data_2324|>filter(ethnicity=="White British"),15, 300000)
 ```
 
 **Asian/Asian British**
